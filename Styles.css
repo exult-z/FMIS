@@ -1,0 +1,143 @@
+/* CupSion FMIS - shared stylesheet. Colors follow the CupSion logo: black, white, gray and coffee brown. */
+:root{--bg:#fff;--sf:#fff;--ink:#141414;--mu:#666;--ln:#e0e0e0;--br:#7b4f33;--bs:#f3f3f3;--pri:#141414;--pi:#fff;
+--ok:#3f7a2c;--oks:#e3f0dc;--gc:#1a6fe8;--gcs:#e1ecfd;--bad:#c62828;--bads:#fbe4e2;--hd:#141414;--hi:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e0e0e;--sf:#1a1a1a;--ink:#f5f5f5;--mu:#a3a3a3;--ln:#333;--br:#b98a63;--bs:#262626;--pri:#f5f5f5;--pi:#141414;--ok:#8fc67a;--oks:#22301c;--gc:#6aa6ff;--gcs:#172a46;--bad:#ff8a80;--bads:#3b1d1b;--hd:#0c0a09;--hi:#f5f5f5}}
+:root[data-theme="dark"]{--bg:#0e0e0e;--sf:#1a1a1a;--ink:#f5f5f5;--mu:#a3a3a3;--ln:#333;--br:#b98a63;--bs:#262626;--pri:#f5f5f5;--pi:#141414;--ok:#8fc67a;--oks:#22301c;--gc:#6aa6ff;--gcs:#172a46;--bad:#ff8a80;--bads:#3b1d1b;--hd:#0c0a09;--hi:#f5f5f5}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.45 'Work Sans',system-ui,sans-serif}
+h1,h2,.num{font-family:'Abril Fatface',Georgia,serif;font-weight:400}
+a{color:inherit;text-decoration:none}
+select,input,button{font:inherit;color:inherit}
+select,input{background:var(--sf);border:1.5px solid var(--ln);border-radius:8px;padding:7px 10px;color:var(--ink)}
+
+/* Header + navigation */
+header{background:var(--hd);color:var(--hi);padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header .logo{width:38px;height:38px;border-radius:50%;background:#fff;color:#141414;display:grid;place-items:center;font-weight:700;font-size:11px;border:3px solid #141414;outline:2px solid #fff}
+header h1{margin:0;font-size:22px;flex:1}
+header small{display:block;font:400 12px 'Work Sans',sans-serif;opacity:.7}
+header label{font-size:13px}
+header select{background:#2a2623;color:#fff;border-color:#4a433e}
+nav{display:flex;gap:6px;padding:12px 16px 0;overflow-x:auto;max-width:980px;margin:auto}
+nav a{border:1.5px solid var(--ink);background:var(--sf);border-radius:8px;padding:8px 14px;font-weight:600;white-space:nowrap}
+nav a.on{background:var(--pri);border-color:var(--pri);color:var(--pi)}
+main{max-width:980px;margin:auto;padding:14px 16px 40px}
+
+/* Cards and text */
+.card{background:var(--sf);border:1.5px solid var(--ln);border-radius:12px;padding:14px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:22px;display:inline-block;border-bottom:3px solid var(--br);padding-bottom:2px}
+.sub{color:var(--mu);font-size:13px;margin:0 0 10px}
+
+/* POS */
+.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.chip{display:flex;align-items:center;gap:8px;text-align:left;background:var(--bs);border:1.5px solid var(--ink);border-radius:10px;padding:8px;cursor:pointer;font-weight:600;font-size:13px}
+.chip i{width:30px;height:30px;border-radius:50%;flex:none}
+.chip small{display:block;font-weight:400;color:var(--mu)}
+.row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--ln)}
+.row .g{flex:1}
+.qty{background:var(--pri);color:var(--pi);border-radius:999px;padding:2px 10px;font-weight:700;font-size:13px}
+.x{border:1px solid var(--ln);background:none;border-radius:6px;cursor:pointer;width:28px;height:28px}
+.total{display:flex;justify-content:space-between;align-items:center;background:var(--bs);border:1.5px solid var(--ln);border-radius:10px;padding:10px 14px;margin:10px 0}
+.total .num{font-size:30px;color:var(--br)}
+
+/* Buttons */
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1.5px solid var(--ln);background:var(--sf);border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+.btn.on.cash{border-color:var(--ink);background:var(--bs);color:var(--ink)}
+.btn.on.gcash{background:var(--br);border-color:var(--br);color:#fff}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:var(--pi);flex:1;min-width:140px}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn:focus-visible,.chip:focus-visible,nav a:focus-visible{outline:3px solid var(--br);outline-offset:2px}
+
+/* Pills, stats, bars */
+.pill{border-radius:999px;padding:2px 12px;font-weight:700;font-size:12px}
+.pill.cash,.pill.ok{background:var(--bs);color:var(--ink)}
+.pill.gcash{background:color-mix(in srgb,var(--br) 18%,var(--sf));color:var(--br)}
+.pill.low{background:var(--bads);color:var(--bad)}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.stat{border:1.5px solid var(--ln);border-radius:10px;padding:10px 12px;background:var(--bs)}
+.stat.dk{background:var(--pri);color:var(--pi);border-color:var(--pri)}
+.stat span{font-size:13px;font-weight:600;opacity:.85}
+.stat .num{font-size:28px;display:block}
+.bar{height:8px;border-radius:99px;background:var(--ln);overflow:hidden;margin-top:6px}
+.bar b{display:block;height:100%;background:var(--pri)}
+.bar.low b{background:var(--bad)}
+.bar.gc b{background:var(--br)}
+.bar.goal{height:12px}.bar.goal b{background:var(--br)}
+.text-low{color:var(--bad)}
+
+/* Tables, alerts, forms */
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:520px}
+th{text-align:left;font-size:12px;color:var(--mu);padding:8px;border-bottom:1.5px solid var(--ln)}
+td{padding:9px 8px;border-bottom:1px solid var(--ln);vertical-align:middle}
+.alert{background:var(--bads);border:1.5px solid var(--bad);color:var(--bad);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:600}
+.alert.okk{background:var(--bs);border-color:var(--ln);color:var(--ink)}
+.form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.form input[type=number]{width:90px}
+
+/* Sales chart */
+.hb{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:13px}
+.hb .nm{width:150px;flex:none}
+.hb .tr{flex:1;background:var(--ln);border-radius:6px;overflow:hidden}
+.hb .fl{height:26px;border-radius:6px;color:#fff;font-weight:700;padding:4px 8px;text-align:right;min-width:26px}
+.seg{display:inline-flex;background:var(--bs);border-radius:999px;padding:4px}
+.seg a{padding:6px 16px;border-radius:999px;font-weight:600;color:var(--ink)}
+.seg a.on{background:var(--pri);color:var(--pi)}
+.goalrow{margin:14px 0 0;display:flex;justify-content:space-between}
+.goalrow .pct{color:var(--br)}
+
+
+/* Role-based access. Backend sets <body data-role="owner|barista|reviewer">.
+   Any element with data-roles="..." is shown only to the roles listed there. This is display only; the server must enforce permissions too. */
+body[data-role="owner"] [data-roles]:not([data-roles~="owner"]),
+body[data-role="barista"] [data-roles]:not([data-roles~="barista"]),
+body[data-role="reviewer"] [data-roles]:not([data-roles~="reviewer"]){display:none !important}
+
+/* Header user info */
+.who{font-size:13px;opacity:.85}
+header .out{border:1.5px solid #4a433e;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;color:#fff}
+
+/* Login and forms */
+.login{max-width:400px;margin:30px auto}
+.field{display:block;font-weight:600;font-size:13px;margin-bottom:12px}
+.field input[type=text],.field input[type=password],.field textarea{display:block;width:100%;margin-top:4px}
+.field input[type=checkbox]{margin-right:6px}
+textarea{background:var(--sf);border:1.5px solid var(--ln);border-radius:8px;padding:7px 10px;color:var(--ink);font:inherit}
+.pill.pend{background:color-mix(in srgb,var(--br) 18%,var(--sf));color:var(--br)}
+td input[type=number]{width:100px}
+
+/* Role picker on the login page (CSS only, no JavaScript) */
+.rolepick{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.rolepick input[type=radio]{position:absolute;opacity:0;pointer-events:none}
+.rolecard{border:1.5px solid var(--ink);border-radius:10px;padding:14px 8px;text-align:center;cursor:pointer;background:var(--sf)}
+.rolecard b{display:block;font-size:16px}
+.rolecard small{display:block;color:var(--mu);font-weight:400;font-size:12px}
+.rolepick input:checked+.rolecard{background:var(--pri);color:var(--pi)}
+.rolepick input:checked+.rolecard small{color:inherit;opacity:.8}
+.rolepick input:focus-visible+.rolecard{outline:3px solid var(--br);outline-offset:2px}
+.owner-form,.barista-form,.pick-hint{grid-column:1/-1;margin:6px 0 0}
+.owner-form,.barista-form{display:none}
+.pick-hint{color:var(--mu);font-size:13px;margin:0}
+#r-owner:checked~.owner-form,#r-barista:checked~.barista-form{display:block}
+#r-owner:checked~.pick-hint,#r-barista:checked~.pick-hint{display:none}
+.owner-form input[type=password],.barista-form select{display:block;width:100%;margin-top:4px}
+.owner-form .btn,.barista-form .btn{width:100%;margin-top:6px}
+
+/* Inventory: add, edit and delete materials (HTML-only, using <details>) */
+.mgr{display:flex;gap:6px;flex-wrap:wrap;min-width:150px}
+.mgr details{flex:0 0 auto}
+.mgr details[open]{flex-basis:100%}
+.mgr summary{list-style:none;cursor:pointer;border:1.5px solid var(--ln);border-radius:10px;padding:6px 12px;font-weight:700;font-size:13px;background:var(--sf);display:inline-block}
+.mgr summary::-webkit-details-marker{display:none}
+.mgr summary:focus-visible{outline:3px solid var(--br);outline-offset:2px}
+.mgr .del summary{color:var(--bad);border-color:var(--bad)}
+.panel{margin-top:8px;padding:10px;border:1.5px solid var(--ln);border-radius:10px;background:var(--bs);min-width:230px}
+.panel label{display:block;font-size:12px;font-weight:600;margin-bottom:8px}
+.panel input,.panel select{display:block;width:100%;margin-top:3px}
+.panel p{margin:0 0 8px}
+.addform{align-items:flex-end}
+.addform label{font-size:12px;font-weight:600}
+.addform input,.addform select{display:block;margin-top:3px}
+.addform input[type=text]{width:190px}

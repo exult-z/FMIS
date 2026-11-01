@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>CupSion FMIS · Take order</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&amp;family=Work+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+</head><body data-role="barista">
+<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<!-- BACKEND: show the logged-in barista's name -->
+<span class="who">Barista 1 · Barista</span><a class="out" href="login.html">Log out</a></header>
+<nav><a aria-current="page" class="on" href="Barista_index.html">Take order</a><a href="Barista_ledger.html">Daily ledger</a><a href="Barista_inventory.html">Inventory</a></nav>
+<main>
+<form action="#" method="post">
+<div class="card"><h2>New order</h2>
+<p class="sub">Tap the drinks, choose how the customer pays, then record the sale. It is entered once.</p>
+<!-- BACKEND: loop over products. value = product id -->
+<div class="menu">
+<button class="chip" name="add" type="button" value="ml"><i style="background:#3a3a3a"></i><span>Matcha Latte<small>₱ 70</small></span></button>
+<button class="chip" name="add" type="button" value="us"><i style="background:#7b4f33"></i><span>Ube Strawberry Latte<small>₱ 90</small></span></button>
+<button class="chip" name="add" type="button" value="hu"><i style="background:#9a9a9a"></i><span>Halukay Ube<small>₱ 90</small></span></button>
+<button class="chip" name="add" type="button" value="mu"><i style="background:#b08968"></i><span>Matcha Ube<small>₱ 80</small></span></button>
+<button class="chip" name="add" type="button" value="ic"><i style="background:#1a1a1a"></i><span>Iced Coffee<small>₱ 60</small></span></button>
+<button class="chip" name="add" type="button" value="addon"><i style="background:#666"></i><span>Add-on<small>₱ 10</small></span></button>
+</div></div>
+<div class="card"><h2>Current order</h2>
+<!-- BACKEND: one .row per item in the current order (sample data below) -->
+<div class="row"><span class="qty">× 2</span><span class="g">Matcha Latte</span><b>₱ 140</b><button aria-label="Remove one Matcha Latte" class="x" type="button">−</button></div>
+<div class="row"><span class="qty">× 1</span><span class="g">Ube Strawberry Latte</span><b>₱ 90</b><button aria-label="Remove one Ube Strawberry Latte" class="x" type="button">−</button></div>
+<div class="row"><span class="qty">× 2</span><span class="g">Add-on</span><b>₱ 20</b><button aria-label="Remove one add-on" class="x" type="button">−</button></div>
+<div class="total"><b>Total</b><span class="num">₱ 250</span></div>
+<div class="acts">
+<!-- BACKEND: add class "on" to the selected payment method -->
+<button class="btn cash" name="method" type="button" value="cash">Cash</button>
+<button class="btn gcash on" name="method" type="button" value="gcash">GCash</button>
+<button class="btn pri" type="submit">Record sale</button>
+</div></div>
+</form>
+</main></body></html>

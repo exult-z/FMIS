@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>CupSion FMIS · Inventory</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&amp;family=Work+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+</head><body data-role="barista">
+<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<!-- BACKEND: show the logged-in barista's name -->
+<span class="who">Barista 1 · Barista</span><a class="out" href="login.html">Log out</a></header>
+<nav><a href="Barista_index.html">Take order</a><a href="Barista_ledger.html">Daily ledger</a><a aria-current="page" class="on" href="Barista_inventory.html">Inventory</a></nav>
+<main>
+<!-- BACKEND: Edit and Delete open with plain HTML (details), no JavaScript. Block or warn on delete if the material is used in a recipe. -->
+<!-- BACKEND: stock is saved in L, kg and pcs. Convert the selected unit (for example mL or g) before saving. -->
+<!-- BACKEND: show .alert for items below 15, or .alert.okk when all are OK -->
+<div class="alert">2 items need restocking: Fresh milk (12) and Ube powder (14) are below 15.</div>
+<div class="card"><h2>Inventory</h2>
+<p class="sub">Each sale deducts ingredients using the recipe. Run-out dates are forecast from the last 7 days of sales.</p>
+<div class="scroll"><table>
+<tr><th>Item</th><th>In stock</th><th>Lasts until</th><th>Status</th></tr>
+<!-- BACKEND: bar width = stock ÷ capacity × 100. Use class "low" on .bar and .text-low when stock < 15 -->
+<tr><td><b>Fresh milk</b></td><td style="min-width:130px"><div class="bar low"><b style="width:20%"></b></div><b class="text-low">12 L</b></td><td>Nov 2, 2026</td><td><span class="pill low">Low</span></td>
+</tr>
+<tr><td><b>Ube powder</b></td><td><div class="bar low"><b style="width:35%"></b></div><b class="text-low">14 kg</b></td><td>Nov 12, 2026</td><td><span class="pill low">Low</span></td>
+</tr>
+<tr><td><b>Matcha powder</b></td><td><div class="bar"><b style="width:70%"></b></div><b>42 kg</b></td><td>Nov 28, 2026</td><td><span class="pill ok">OK</span></td>
+</tr>
+<tr><td><b>Cups</b></td><td><div class="bar"><b style="width:60%"></b></div><b>1,200 pcs</b></td><td>Nov 13, 2026</td><td><span class="pill ok">OK</span></td>
+</tr>
+</table></div></div>
+
+<div class="card"><h2>Log wastage</h2>
+<p class="sub">Spoiled or spilled stock is removed from inventory and counted as an expense, so cost per cup reflects reality.</p>
+<form action="#" class="form" method="post">
+<select aria-label="Item" name="item"><option>Fresh milk</option><option>Ube powder</option><option>Matcha powder</option><option>Cups</option></select>
+<input aria-label="Quantity wasted" min="0" name="qty" placeholder="Qty" step="any" type="number"/>
+<!-- BACKEND: convert to the item's stock unit (L, kg or pcs) before deducting -->
+<select aria-label="Unit" name="unit"><optgroup label="Volume"><option>L</option><option>mL</option></optgroup><optgroup label="Weight"><option>kg</option><option>g</option></optgroup><optgroup label="Count"><option>pcs</option></optgroup></select>
+<select aria-label="Reason" name="reason"><option>Spoiled</option><option>Spilled</option><option>Expired</option></select>
+<button class="btn sm">Log wastage</button>
+</form>
+<!-- BACKEND: latest wastage entries. The ₱ value is owner-only -->
+<div class="row"><span class="sub" style="margin:0">09:15</span><span class="g">Fresh milk: 1 L (Spoiled)</span></div>
+</div>
+</main></body></html>

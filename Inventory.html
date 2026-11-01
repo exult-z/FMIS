@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Inventory</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head><body data-role="owner">
+<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<!-- BACKEND: show the logged-in user's name and role -->
+<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
+<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html" class="on" aria-current="page">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" data-roles="owner">Menu &amp; prices</a><a href="report.html" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<main>
+<!-- BACKEND: Edit and Delete open with plain HTML (details), no JavaScript. Block or warn on delete if the material is used in a recipe. -->
+<!-- BACKEND: stock is saved in L, kg and pcs. Convert the selected unit (for example mL or g) before saving. -->
+<!-- BACKEND: show .alert for items below 15, or .alert.okk when all are OK -->
+<div class="alert">2 items need restocking: Fresh milk (12) and Ube powder (14) are below 15.</div>
+
+<div class="card"><h2>Inventory</h2>
+<p class="sub">Each sale deducts ingredients using the recipe. Run-out dates are forecast from the last 7 days of sales.</p>
+<div class="scroll"><table>
+<tr><th>Item</th><th>In stock</th><th>Lasts until</th><th>Status</th><th data-roles="owner">Receive stock</th><th data-roles="owner">Manage</th></tr>
+<!-- BACKEND: bar width = stock ÷ capacity × 100. Use class "low" on .bar and .text-low when stock < 15 -->
+<tr><td><b>Fresh milk</b></td><td style="min-width:130px"><div class="bar low"><b style="width:20%"></b></div><b class="text-low">12 L</b></td><td>Nov 2, 2026</td><td><span class="pill low">Low</span></td>
+<td data-roles="owner"><form class="form" method="post" action="#"><input type="number" name="qty" min="0" step="any" aria-label="Quantity received for Fresh milk"><select name="unit" aria-label="Unit for Fresh milk"><option value="L">L</option><option value="mL">mL</option></select><button class="btn sm">Add</button></form></td><td data-roles="owner"><div class="mgr">
+<details><summary>Edit</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="milk">
+<label>Name<input type="text" name="name" value="Fresh milk"></label>
+<label>Unit<select name="unit"><option selected>L</option><option>mL</option><option>kg</option><option>g</option><option>pcs</option><option>pack</option></select></label>
+<label>Cost per unit (₱)<input type="number" name="cost" value="70" min="0" step="any"></label>
+<label>Low-stock level<input type="number" name="low" value="15" min="0" step="any"></label>
+<button class="btn sm pri">Save changes</button></form></details>
+<details class="del"><summary>Delete</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="milk">
+<p class="sub"><b>Delete Fresh milk?</b> It is used in 5 drinks. Their cost per cup will change, and this cannot be undone.</p>
+<button class="btn sm">Yes, delete</button></form></details></div></td></tr>
+<tr><td><b>Ube powder</b></td><td><div class="bar low"><b style="width:35%"></b></div><b class="text-low">14 kg</b></td><td>Nov 12, 2026</td><td><span class="pill low">Low</span></td>
+<td data-roles="owner"><form class="form" method="post" action="#"><input type="number" name="qty" min="0" step="any" aria-label="Quantity received for Ube powder"><select name="unit" aria-label="Unit for Ube powder"><option value="kg">kg</option><option value="g">g</option></select><button class="btn sm">Add</button></form></td><td data-roles="owner"><div class="mgr">
+<details><summary>Edit</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="ube">
+<label>Name<input type="text" name="name" value="Ube powder"></label>
+<label>Unit<select name="unit"><option>L</option><option>mL</option><option selected>kg</option><option>g</option><option>pcs</option><option>pack</option></select></label>
+<label>Cost per unit (₱)<input type="number" name="cost" value="600" min="0" step="any"></label>
+<label>Low-stock level<input type="number" name="low" value="15" min="0" step="any"></label>
+<button class="btn sm pri">Save changes</button></form></details>
+<details class="del"><summary>Delete</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="ube">
+<p class="sub"><b>Delete Ube powder?</b> It is used in 3 drinks. Their cost per cup will change, and this cannot be undone.</p>
+<button class="btn sm">Yes, delete</button></form></details></div></td></tr>
+<tr><td><b>Matcha powder</b></td><td><div class="bar"><b style="width:70%"></b></div><b>42 kg</b></td><td>Nov 28, 2026</td><td><span class="pill ok">OK</span></td>
+<td data-roles="owner"><form class="form" method="post" action="#"><input type="number" name="qty" min="0" step="any" aria-label="Quantity received for Matcha powder"><select name="unit" aria-label="Unit for Matcha powder"><option value="kg">kg</option><option value="g">g</option></select><button class="btn sm">Add</button></form></td><td data-roles="owner"><div class="mgr">
+<details><summary>Edit</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="matcha">
+<label>Name<input type="text" name="name" value="Matcha powder"></label>
+<label>Unit<select name="unit"><option>L</option><option>mL</option><option selected>kg</option><option>g</option><option>pcs</option><option>pack</option></select></label>
+<label>Cost per unit (₱)<input type="number" name="cost" value="1200" min="0" step="any"></label>
+<label>Low-stock level<input type="number" name="low" value="15" min="0" step="any"></label>
+<button class="btn sm pri">Save changes</button></form></details>
+<details class="del"><summary>Delete</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="matcha">
+<p class="sub"><b>Delete Matcha powder?</b> It is used in 2 drinks. Their cost per cup will change, and this cannot be undone.</p>
+<button class="btn sm">Yes, delete</button></form></details></div></td></tr>
+<tr><td><b>Cups</b></td><td><div class="bar"><b style="width:60%"></b></div><b>1,200 pcs</b></td><td>Nov 13, 2026</td><td><span class="pill ok">OK</span></td>
+<td data-roles="owner"><form class="form" method="post" action="#"><input type="number" name="qty" min="0" step="any" aria-label="Quantity received for Cups"><select name="unit" aria-label="Unit for Cups"><option value="pcs">pcs</option><option value="pack">pack of 50</option></select><button class="btn sm">Add</button></form></td><td data-roles="owner"><div class="mgr">
+<details><summary>Edit</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="cup">
+<label>Name<input type="text" name="name" value="Cups"></label>
+<label>Unit<select name="unit"><option>L</option><option>mL</option><option>kg</option><option>g</option><option selected>pcs</option><option>pack</option></select></label>
+<label>Cost per unit (₱)<input type="number" name="cost" value="3" min="0" step="any"></label>
+<label>Low-stock level<input type="number" name="low" value="15" min="0" step="any"></label>
+<button class="btn sm pri">Save changes</button></form></details>
+<details class="del"><summary>Delete</summary><form class="panel" method="post" action="#"><input type="hidden" name="id" value="cup">
+<p class="sub"><b>Delete Cups?</b> It is used in 5 drinks. Their cost per cup will change, and this cannot be undone.</p>
+<button class="btn sm">Yes, delete</button></form></details></div></td></tr>
+</table></div></div>
+
+<div class="card" data-roles="owner"><h2>Add a material</h2>
+<p class="sub">Add a new ingredient or supply, like syrup, straws or lids. Only the owner can add, edit or delete materials, and every change is saved in the audit log.</p>
+<!-- BACKEND: create the material, then list it in the table above and in the recipes -->
+<form class="form addform" method="post" action="#">
+<label>Name<input type="text" name="name" placeholder="e.g. Strawberry syrup" required></label>
+<label>Unit<select name="unit"><option selected>L</option><option>mL</option><option>kg</option><option>g</option><option>pcs</option><option>pack</option></select></label>
+<label>Starting stock<input type="number" name="qty" min="0" step="any" value="0"></label>
+<label>Cost per unit (₱)<input type="number" name="cost" min="0" step="any" value="0"></label>
+<label>Low-stock level<input type="number" name="low" min="0" step="any" value="15"></label>
+<button class="btn pri">Add material</button></form></div>
+
+<div class="card"><h2>Log wastage</h2>
+<p class="sub">Spoiled or spilled stock is removed from inventory and counted as an expense, so cost per cup reflects reality.</p>
+<form class="form" data-roles="owner barista" method="post" action="#">
+<select name="item" aria-label="Item"><option>Fresh milk</option><option>Ube powder</option><option>Matcha powder</option><option>Cups</option></select>
+<input type="number" name="qty" min="0" step="any" placeholder="Qty" aria-label="Quantity wasted">
+<!-- BACKEND: convert to the item's stock unit (L, kg or pcs) before deducting -->
+<select name="unit" aria-label="Unit"><optgroup label="Volume"><option>L</option><option>mL</option></optgroup><optgroup label="Weight"><option>kg</option><option>g</option></optgroup><optgroup label="Count"><option>pcs</option></optgroup></select>
+<select name="reason" aria-label="Reason"><option>Spoiled</option><option>Spilled</option><option>Expired</option></select>
+<button class="btn sm">Log wastage</button>
+</form>
+<!-- BACKEND: latest wastage entries. The ₱ value is owner-only -->
+<div class="row"><span class="sub" style="margin:0">09:15</span><span class="g">Fresh milk: 1 L (Spoiled)</span><b data-roles="owner reviewer">₱ 70</b></div>
+</div>
+</main></body></html>

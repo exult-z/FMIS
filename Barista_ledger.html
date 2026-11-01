@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>CupSion FMIS · Daily ledger</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&amp;family=Work+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css" rel="stylesheet"/>
+</head><body data-role="barista">
+<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<!-- BACKEND: show the logged-in user's name and role -->
+<span class="who">Barista 1 · Barista</span><a class="out" href="login.html">Log out</a></header>
+<nav><a href="Barista_index.html">Take order</a><a aria-current="page" class="on" href="Barista_ledger.html">Daily ledger</a><a href="Barista_inventory.html">Inventory</a></nav>
+<main>
+<div class="card"><h2>Daily ledger</h2>
+<p class="sub">Sunday, November 1, 2026 · 4 sales</p>
+<div class="scroll"><table>
+<tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th></tr>
+<!-- BACKEND: one <tr> per sale today. The Void button is owner-only -->
+<tr><td>10:02</td><td>Matcha Latte × 1</td><td><span class="pill cash">Cash</span></td><td><b>₱ 70</b></td></tr>
+<tr><td>10:05</td><td>Ube Strawberry Latte × 2</td><td><span class="pill gcash">GCash</span></td><td><b>₱ 180</b></td></tr>
+<tr><td>10:09</td><td>Matcha Latte × 3 + 2 add-on</td><td><span class="pill cash">Cash</span></td><td><b>₱ 230</b></td></tr>
+<tr><td>10:12</td><td>Ube Strawberry Latte × 1, Matcha Latte × 2, 2 add-on</td><td><span class="pill gcash">GCash</span></td><td><b>₱ 250</b></td></tr>
+</table></div>
+<!-- BACKEND: bar width = channel total ÷ total income × 100 -->
+<div class="grid3">
+<div class="stat"><span>Cash</span><span class="num">₱ 300</span><div class="bar"><b style="width:41%"></b></div></div>
+<div class="stat"><span>GCash</span><span class="num">₱ 430</span><div class="bar gc"><b style="width:59%"></b></div></div>
+<div class="stat dk"><span>Total income</span><span class="num">₱ 730</span></div>
+</div></div>
+
+</main></body></html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Menu & prices</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-role="owner">
+<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<!-- BACKEND: show the logged-in user's name and role -->
+<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
+<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" class="on" aria-current="page" data-roles="owner">Menu &amp; prices</a><a href="report.html" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<main>
+<div class="card"><h2>Menu and prices</h2>
+<p class="sub">Only the owner can change prices. Baristas can see the menu on the Take order page but cannot edit it. Every change is saved in the audit log.</p>
+<form method="post" action="#"><div class="scroll"><table>
+<tr><th>Drink</th><th>Price (₱)</th><th>Cost per cup</th><th>Profit per cup</th></tr>
+<!-- BACKEND: one row per product. Cost comes from the recipe and ingredient prices -->
+<tr><td><b>Matcha Latte</b></td><td><input type="number" name="price_ml" value="70" min="0" step="1" aria-label="Price of Matcha Latte"></td><td>₱ 28</td><td><b>₱ 42</b></td></tr>
+<tr><td><b>Ube Strawberry Latte</b></td><td><input type="number" name="price_us" value="90" min="0" step="1" aria-label="Price of Ube Strawberry Latte"></td><td>₱ 22</td><td><b>₱ 68</b></td></tr>
+<tr><td><b>Halukay Ube</b></td><td><input type="number" name="price_hu" value="90" min="0" step="1" aria-label="Price of Halukay Ube"></td><td>₱ 27</td><td><b>₱ 63</b></td></tr>
+<tr><td><b>Matcha Ube</b></td><td><input type="number" name="price_mu" value="80" min="0" step="1" aria-label="Price of Matcha Ube"></td><td>₱ 28</td><td><b>₱ 52</b></td></tr>
+<tr><td><b>Iced Coffee</b></td><td><input type="number" name="price_ic" value="60" min="0" step="1" aria-label="Price of Iced Coffee"></td><td>₱ 7</td><td><b>₱ 53</b></td></tr>
+<tr><td><b>Add-on</b></td><td><input type="number" name="price_addon" value="10" min="0" step="1" aria-label="Price of add-on"></td><td>₱ 4</td><td><b>₱ 6</b></td></tr>
+</table></div>
+<div class="acts" style="margin-top:12px"><button type="submit" class="btn pri">Save prices</button></div></form></div>
+</main></body></html>

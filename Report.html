@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Daily report</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-role="owner">
+<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<!-- BACKEND: show the logged-in user's name and role -->
+<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
+<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" data-roles="owner">Menu &amp; prices</a><a href="report.html" class="on" aria-current="page" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<main>
+<div class="card"><h2>Daily report</h2>
+<p class="sub">Sunday, November 1, 2026 · Prepared by Maria Santos (Owner) · Status: <span class="pill pend">Pending review</span></p>
+<div class="grid3">
+<div class="stat"><span>Sales recorded</span><span class="num">4</span></div>
+<div class="stat"><span>Cash</span><span class="num">₱ 300</span></div>
+<div class="stat"><span>GCash</span><span class="num">₱ 430</span></div>
+<div class="stat dk"><span>Total income</span><span class="num">₱ 730</span></div>
+<div class="stat"><span>Ingredient cost</span><span class="num">₱ 250</span></div>
+<div class="stat"><span>Wastage</span><span class="num">₱ 70</span></div>
+<div class="stat dk"><span>Gross profit</span><span class="num">₱ 410</span></div>
+</div></div>
+
+<div class="card" data-roles="reviewer"><h2>Verify this report</h2>
+<p class="sub">Check the totals against the ledger and the actual cash and GCash received. The person who prepared the report cannot verify it.</p>
+<form method="post" action="#">
+<label class="field"><input type="checkbox" name="checked" required> I compared the cash and GCash totals with the ledger.</label>
+<label class="field">Notes (optional)<textarea name="notes" rows="3" placeholder="Anything that does not match?"></textarea></label>
+<div class="acts"><button type="submit" name="action" value="verify" class="btn pri">Verify report</button><button type="submit" name="action" value="flag" class="btn">Flag a problem</button></div>
+</form></div>
+
+<div class="card" data-roles="owner"><h2>Review status</h2>
+<p class="sub">This report is waiting for the reviewer. You will see the result here once it is verified or flagged.</p></div>
+
+<div class="card"><h2>Previous reports</h2>
+<div class="scroll"><table>
+<tr><th>Date</th><th>Total income</th><th>Gross profit</th><th>Status</th><th>Verified by</th></tr>
+<!-- BACKEND: list of past daily reports -->
+<tr><td>Oct 31, 2026</td><td>₱ 9,840</td><td>₱ 6,120</td><td><span class="pill ok">Verified</span></td><td>Reviewer · 8:10 PM</td></tr>
+<tr><td>Oct 30, 2026</td><td>₱ 9,310</td><td>₱ 5,870</td><td><span class="pill ok">Verified</span></td><td>Reviewer · 8:05 PM</td></tr>
+</table></div></div>
+</main></body></html>
