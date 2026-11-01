@@ -4,42 +4,76 @@
 <title>CupSion FMIS · Daily report</title>
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-</head>
-<body data-role="owner">
-<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+</head><body data-role="owner">
 <header><div class="logo">CS</div><h1>CupSion</h1>
-<!-- BACKEND: show the logged-in user's name and role -->
-<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
-<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" data-roles="owner">Menu &amp; prices</a><a href="report.html" class="on" aria-current="page" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu & prices</a><a href="Report.html" class="on" aria-current="page">Daily report</a><a href="Logs.html">Audit log</a></nav>
 <main>
-<div class="card"><h2>Daily report</h2>
-<p class="sub">Sunday, November 1, 2026 · Prepared by Maria Santos (Owner) · Status: <span class="pill pend">Pending review</span></p>
+
+<div class="card"><h2>Daily summary</h2>
+<p class="sub" id="rep-date">Loading…</p>
 <div class="grid3">
-<div class="stat"><span>Sales recorded</span><span class="num">4</span></div>
-<div class="stat"><span>Cash</span><span class="num">₱ 300</span></div>
-<div class="stat"><span>GCash</span><span class="num">₱ 430</span></div>
-<div class="stat dk"><span>Total income</span><span class="num">₱ 730</span></div>
-<div class="stat"><span>Ingredient cost</span><span class="num">₱ 250</span></div>
-<div class="stat"><span>Wastage</span><span class="num">₱ 70</span></div>
-<div class="stat dk"><span>Gross profit</span><span class="num">₱ 410</span></div>
-</div></div>
+  <div class="stat"><span>Cash</span><span class="num" id="rep-cash">₱ 0</span></div>
+  <div class="stat"><span>GCash</span><span class="num" id="rep-gcash">₱ 0</span></div>
+  <div class="stat dk"><span>Total income</span><span class="num" id="rep-total">₱ 0</span></div>
+</div>
+<div class="grid3" style="margin-top:10px">
+  <div class="stat"><span>Sales count</span><span class="num" id="rep-count">0</span></div>
+  <div class="stat"><span>Cups today</span><span class="num" id="rep-cups">0</span></div>
+  <div class="stat"><span>Status</span><span class="num" id="rep-status">—</span></div>
+</div>
+</div>
 
-<div class="card" data-roles="reviewer"><h2>Verify this report</h2>
-<p class="sub">Check the totals against the ledger and the actual cash and GCash received. The person who prepared the report cannot verify it.</p>
-<form method="post" action="#">
-<label class="field"><input type="checkbox" name="checked" required> I compared the cash and GCash totals with the ledger.</label>
-<label class="field">Notes (optional)<textarea name="notes" rows="3" placeholder="Anything that does not match?"></textarea></label>
-<div class="acts"><button type="submit" name="action" value="verify" class="btn pri">Verify report</button><button type="submit" name="action" value="flag" class="btn">Flag a problem</button></div>
-</form></div>
+<div class="card"><h2>Verification & sign-off</h2>
+<div id="signoff-area"></div>
+</div>
 
-<div class="card" data-roles="owner"><h2>Review status</h2>
-<p class="sub">This report is waiting for the reviewer. You will see the result here once it is verified or flagged.</p></div>
-
-<div class="card"><h2>Previous reports</h2>
+<div class="card"><h2>Today's activity (audit trail)</h2>
+<p class="sub">Every change, addition, replacement, order, and void recorded today.</p>
 <div class="scroll"><table>
-<tr><th>Date</th><th>Total income</th><th>Gross profit</th><th>Status</th><th>Verified by</th></tr>
-<!-- BACKEND: list of past daily reports -->
-<tr><td>Oct 31, 2026</td><td>₱ 9,840</td><td>₱ 6,120</td><td><span class="pill ok">Verified</span></td><td>Reviewer · 8:10 PM</td></tr>
-<tr><td>Oct 30, 2026</td><td>₱ 9,310</td><td>₱ 5,870</td><td><span class="pill ok">Verified</span></td><td>Reviewer · 8:05 PM</td></tr>
-</table></div></div>
-</main></body></html>
+<thead><tr><th>When</th><th>User</th><th>Action</th></tr></thead>
+<tbody id="rep-logs"></tbody>
+</table></div>
+</div>
+
+</main>
+<script>
+(async () => {
+  const r = await (await fetch('/api/report?t=' + Date.now())).json();
+
+  document.getElementById('rep-date').textContent =
+    new Date().toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  document.getElementById('rep-cash').textContent = '₱ ' + (r.cash || 0);
+  document.getElementById('rep-gcash').textContent = '₱ ' + (r.gcash || 0);
+  document.getElementById('rep-total').textContent = '₱ ' + (r.total || 0);
+  document.getElementById('rep-count').textContent = r.count || 0;
+  document.getElementById('rep-cups').textContent = r.todayCups ?? 0;
+  document.getElementById('rep-status').textContent = r.status || 'Pending review';
+
+  // Sign-off block
+  const area = document.getElementById('signoff-area');
+  if (r.status === 'Verified') {
+    area.innerHTML = `
+      <p class="sub">✔ Verified &amp; signed by <b>${r.signedBy}</b> on ${r.signedAt}.</p>
+      <form method="post" action="/unverify-report" onsubmit="return confirm('Reset verification? This reopens the report.')">
+        <button type="submit" class="btn">Reset verification</button>
+      </form>`;
+  } else {
+    area.innerHTML = `
+      <form class="form" method="post" action="/verify-report">
+        <label class="field">Signed by<input type="text" name="signedBy" value="Maria Santos" required></label>
+        <button type="submit" class="btn pri">Verify &amp; sign off</button>
+      </form>`;
+  }
+
+  // Audit trail
+  const tbody = document.getElementById('rep-logs');
+  const logs = r.logs || [];
+  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="3" class="sub">No activity recorded yet.</td></tr>';
+  for (const l of logs) {
+    tbody.insertAdjacentHTML('beforeend',
+      `<tr><td>${l.when}</td><td>${l.user}</td><td>${l.action}</td></tr>`);
+  }
+})();
+</script>
+</body></html>

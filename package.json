@@ -1,0 +1,12 @@
+{
+  "name": "cupsion-fmis",
+  "version": "1.0.0",
+  "description": "CupSion Financial & Management Information System Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

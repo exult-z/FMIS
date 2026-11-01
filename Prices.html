@@ -4,25 +4,55 @@
 <title>CupSion FMIS · Menu & prices</title>
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-</head>
-<body data-role="owner">
-<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+</head><body data-role="owner">
 <header><div class="logo">CS</div><h1>CupSion</h1>
-<!-- BACKEND: show the logged-in user's name and role -->
-<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
-<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" class="on" aria-current="page" data-roles="owner">Menu &amp; prices</a><a href="report.html" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html" class="on" aria-current="page">Menu & prices</a><a href="Report.html">Daily report</a><a href="Logs.html">Audit log</a></nav>
 <main>
-<div class="card"><h2>Menu and prices</h2>
-<p class="sub">Only the owner can change prices. Baristas can see the menu on the Take order page but cannot edit it. Every change is saved in the audit log.</p>
-<form method="post" action="#"><div class="scroll"><table>
-<tr><th>Drink</th><th>Price (₱)</th><th>Cost per cup</th><th>Profit per cup</th></tr>
-<!-- BACKEND: one row per product. Cost comes from the recipe and ingredient prices -->
-<tr><td><b>Matcha Latte</b></td><td><input type="number" name="price_ml" value="70" min="0" step="1" aria-label="Price of Matcha Latte"></td><td>₱ 28</td><td><b>₱ 42</b></td></tr>
-<tr><td><b>Ube Strawberry Latte</b></td><td><input type="number" name="price_us" value="90" min="0" step="1" aria-label="Price of Ube Strawberry Latte"></td><td>₱ 22</td><td><b>₱ 68</b></td></tr>
-<tr><td><b>Halukay Ube</b></td><td><input type="number" name="price_hu" value="90" min="0" step="1" aria-label="Price of Halukay Ube"></td><td>₱ 27</td><td><b>₱ 63</b></td></tr>
-<tr><td><b>Matcha Ube</b></td><td><input type="number" name="price_mu" value="80" min="0" step="1" aria-label="Price of Matcha Ube"></td><td>₱ 28</td><td><b>₱ 52</b></td></tr>
-<tr><td><b>Iced Coffee</b></td><td><input type="number" name="price_ic" value="60" min="0" step="1" aria-label="Price of Iced Coffee"></td><td>₱ 7</td><td><b>₱ 53</b></td></tr>
-<tr><td><b>Add-on</b></td><td><input type="number" name="price_addon" value="10" min="0" step="1" aria-label="Price of add-on"></td><td>₱ 4</td><td><b>₱ 6</b></td></tr>
+
+<div class="card"><h2>Current menu</h2>
+<p class="sub">Edit a name or price and save — changes apply to Take order immediately.</p>
+<table>
+<thead><tr><th>Item</th><th>Price (₱)</th><th>Save</th><th></th></tr></thead>
+<tbody id="prices-body"></tbody>
 </table></div>
-<div class="acts" style="margin-top:12px"><button type="submit" class="btn pri">Save prices</button></div></form></div>
-</main></body></html>
+
+<div class="card"><h2>Add new item</h2>
+<form class="form" method="post" action="/menu/add">
+<label class="field">Item name<input type="text" name="name" placeholder="e.g. Strawberry Latte" required></label>
+<label class="field">Price (₱)<input type="number" name="price" min="1" placeholder="80" required></label>
+<button type="submit" class="btn pri">Add item</button>
+</form></div>
+
+</main>
+<script>
+(async () => {
+  const db = await (await fetch('/api/db?t=' + Date.now())).json();
+  const menu = db.menu || {};
+  const tbody = document.getElementById('prices-body');
+  const entries = Object.entries(menu);
+  tbody.innerHTML = entries.length ? '' : '<tr><td colspan="4" class="sub">No menu items yet.</td></tr>';
+
+  for (const [id, it] of entries) {
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>
+          <form method="post" action="/menu/update" id="f-${id}" style="display:contents">
+            <input type="hidden" name="id" value="${id}">
+            <input type="text" name="name" value="${it.name}" required>
+        </td>
+        <td>
+            <input type="number" name="price" value="${it.price}" min="1" required>
+        </td>
+        <td><button type="submit" class="btn sm pri">Save</button></form></td>
+        <td>
+          <form method="post" action="/menu/delete" onsubmit="return confirm('Remove ${it.name} from menu?')">
+            <input type="hidden" name="id" value="${id}">
+            <button type="submit" class="btn sm">Remove</button>
+          </form>
+        </td>
+      </tr>`);
+  }
+})();
+</script>
+</body></html>

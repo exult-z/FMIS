@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# SQLite database files
+cupsion.db
+cupsion.db-wal
+cupsion.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Old JSON backup
+db.json.old
+db.backup-*.json
+
+# Node logs
+npm-debug.log*
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/

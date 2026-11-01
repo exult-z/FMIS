@@ -1,40 +1,70 @@
 <!DOCTYPE html>
-
-<html lang="en"><head><meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>CupSion FMIS · Take order</title>
-<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&amp;family=Work+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
-<link href="styles.css" rel="stylesheet"/>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Barista · Take order</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
 </head><body data-role="barista">
-<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
 <header><div class="logo">CS</div><h1>CupSion</h1>
-<!-- BACKEND: show the logged-in barista's name -->
-<span class="who">Barista 1 · Barista</span><a class="out" href="login.html">Log out</a></header>
-<nav><a aria-current="page" class="on" href="Barista_index.html">Take order</a><a href="Barista_ledger.html">Daily ledger</a><a href="Barista_inventory.html">Inventory</a></nav>
-<main>
-<form action="#" method="post">
-<div class="card"><h2>New order</h2>
-<p class="sub">Tap the drinks, choose how the customer pays, then record the sale. It is entered once.</p>
-<!-- BACKEND: loop over products. value = product id -->
-<div class="menu">
-<button class="chip" name="add" type="button" value="ml"><i style="background:#3a3a3a"></i><span>Matcha Latte<small>₱ 70</small></span></button>
-<button class="chip" name="add" type="button" value="us"><i style="background:#7b4f33"></i><span>Ube Strawberry Latte<small>₱ 90</small></span></button>
-<button class="chip" name="add" type="button" value="hu"><i style="background:#9a9a9a"></i><span>Halukay Ube<small>₱ 90</small></span></button>
-<button class="chip" name="add" type="button" value="mu"><i style="background:#b08968"></i><span>Matcha Ube<small>₱ 80</small></span></button>
-<button class="chip" name="add" type="button" value="ic"><i style="background:#1a1a1a"></i><span>Iced Coffee<small>₱ 60</small></span></button>
-<button class="chip" name="add" type="button" value="addon"><i style="background:#666"></i><span>Add-on<small>₱ 10</small></span></button>
-</div></div>
+<span class="who">Barista · on shift</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Barista_index.html" class="on" aria-current="page">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html">Inventory</a><a href="Barista_sales.html">Sales chart</a></nav>
+<form method="post" action="/record-sale" id="pos-form">
+<div class="card"><h2>New order</h2><p class="sub">Tap drinks to add to cart.</p>
+<div class="menu" id="pos-menu"></div></div>
+
 <div class="card"><h2>Current order</h2>
-<!-- BACKEND: one .row per item in the current order (sample data below) -->
-<div class="row"><span class="qty">× 2</span><span class="g">Matcha Latte</span><b>₱ 140</b><button aria-label="Remove one Matcha Latte" class="x" type="button">−</button></div>
-<div class="row"><span class="qty">× 1</span><span class="g">Ube Strawberry Latte</span><b>₱ 90</b><button aria-label="Remove one Ube Strawberry Latte" class="x" type="button">−</button></div>
-<div class="row"><span class="qty">× 2</span><span class="g">Add-on</span><b>₱ 20</b><button aria-label="Remove one add-on" class="x" type="button">−</button></div>
-<div class="total"><b>Total</b><span class="num">₱ 250</span></div>
+<div id="cart-items"></div>
+<div class="total"><b>Total</b><span class="num" id="cart-total">₱ 0</span></div>
+<input type="hidden" name="orderSummary" id="hidden-items-input">
+<input type="hidden" name="amount" id="hidden-amount-input" value="0">
+<input type="hidden" name="method" id="hidden-method-input" value="Cash">
 <div class="acts">
-<!-- BACKEND: add class "on" to the selected payment method -->
-<button class="btn cash" name="method" type="button" value="cash">Cash</button>
-<button class="btn gcash on" name="method" type="button" value="gcash">GCash</button>
-<button class="btn pri" type="submit">Record sale</button>
+<button type="button" class="btn cash on" id="btn-cash" onclick="setPayment('Cash')">Cash</button>
+<button type="button" class="btn gcash" id="btn-gcash" onclick="setPayment('GCash')">GCash</button>
+<button type="submit" class="btn pri">Record sale</button>
 </div></div>
 </form>
-</main></body></html>
+</main>
+<script>
+let cart = {};
+function setPayment(method) {
+  document.getElementById('hidden-method-input').value = method;
+  document.getElementById('btn-cash').classList.toggle('on', method === 'Cash');
+  document.getElementById('btn-gcash').classList.toggle('on', method === 'GCash');
+}
+function renderCart() {
+  const container = document.getElementById('cart-items');
+  container.innerHTML = '';
+  let total = 0; const summary = [];
+  for (const name in cart) {
+    const item = cart[name]; const sub = item.price * item.qty;
+    total += sub; summary.push(name + ' × ' + item.qty);
+    container.insertAdjacentHTML('beforeend',
+      `<div class="row"><span class="qty">× ${item.qty}</span><span class="g">${name}</span><b>₱ ${sub}</b><button type="button" class="x" onclick="removeItem('${name.replace(/'/g,"\\'")}')">−</button></div>`);
+  }
+  if (!Object.keys(cart).length) container.innerHTML = '<p class="sub">No items in current order. Tap a drink above.</p>';
+  document.getElementById('cart-total').textContent = '₱ ' + total;
+  document.getElementById('hidden-items-input').value = summary.join(', ');
+  document.getElementById('hidden-amount-input').value = total;
+}
+function removeItem(name) {
+  if (!cart[name]) return;
+  if (--cart[name].qty <= 0) delete cart[name];
+  renderCart();
+}
+(async () => {
+  const db = await (await fetch('/api/db?t=' + Date.now())).json();
+  const menu = db.menu || {};
+  const wrap = document.getElementById('pos-menu');
+  wrap.innerHTML = Object.entries(menu).map(([id, it]) =>
+    `<button type="button" class="chip" data-name="${it.name}" data-price="${it.price}">
+       <span>${it.name}<small>₱ ${it.price}</small></span></button>`).join('');
+  wrap.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    const name = b.dataset.name, price = +b.dataset.price;
+    if (!cart[name]) cart[name] = { price, qty: 0 };
+    cart[name].qty++; renderCart();
+  }));
+  renderCart();
+})();
+</script>
+</body></html>

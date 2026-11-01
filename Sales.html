@@ -5,29 +5,149 @@
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head><body data-role="owner">
-<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
-<header><div class="logo">CS</div><h1>CupSion</h1>
-<!-- BACKEND: show the logged-in user's name and role -->
-<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
-<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" class="on" aria-current="page" data-roles="owner reviewer">Sales chart</a><a href="prices.html" data-roles="owner">Menu &amp; prices</a><a href="report.html" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<header>
+  <div class="logo">CS</div>
+  <h1>CupSion<small>Sales chart</small></h1>
+  <span class="who">Maria Santos · Owner</span>
+  <a class="out" href="/logout">Log out</a>
+</header>
+<nav>
+  <a href="Index.html">Take order</a>
+  <a href="Ledger.html">Daily ledger</a>
+  <a href="Inventory.html">Inventory</a>
+  <a href="Sales.html" class="on" aria-current="page">Sales chart</a>
+  <a href="Prices.html">Menu & prices</a>
+  <a href="Report.html">Daily report</a>
+  <a href="Logs.html">Audit log</a>
+</nav>
 <main>
-<div class="card"><h2>Cups per product</h2>
-<!-- BACKEND: ?period=day|week|month. Put class "on" on the active link -->
-<div class="seg" role="group" aria-label="Period"><a href="sales.html?period=day" class="on">Day</a><a href="sales.html?period=week">Week</a><a href="sales.html?period=month">Month</a></div>
-<p class="sub" style="margin-top:8px">Cups sold today</p>
-<!-- BACKEND: bar width = cups ÷ highest product × 100 -->
-<div class="hb"><span class="nm">Matcha Latte</span><div class="tr"><div class="fl" style="width:100%;background:#3a3a3a">30</div></div></div>
-<div class="hb"><span class="nm">Ube Strawberry Latte</span><div class="tr"><div class="fl" style="width:80%;background:#7b4f33">24</div></div></div>
-<div class="hb"><span class="nm">Halukay Ube</span><div class="tr"><div class="fl" style="width:60%;background:#9a9a9a">18</div></div></div>
-<div class="hb"><span class="nm">Matcha Ube</span><div class="tr"><div class="fl" style="width:47%;background:#b08968">14</div></div></div>
-<div class="hb"><span class="nm">Iced Coffee</span><div class="tr"><div class="fl" style="width:33%;background:#1a1a1a">10</div></div></div>
 
-<p class="goalrow"><b>Daily goal: 100 cups</b><b class="pct">96%</b></p>
-<div class="bar goal"><b style="width:96%"></b></div>
-<p class="sub" style="margin-top:6px">4 more cups to reach today’s goal.</p>
-<div class="grid3">
-<div class="stat dk"><span>Today</span><span class="num">96 cups</span></div>
-<div class="stat"><span>Average (previous 7 days)</span><span class="num">98 cups</span></div>
-<div class="stat"><span>Last 30 days</span><span class="num">2,940 cups</span></div>
-</div></div>
-</main></body></html>
+<div class="card">
+  <h2>Cups per product</h2>
+  <div class="seg" role="group" aria-label="Period">
+    <a href="#" data-period="day" class="on">Day</a>
+    <a href="#" data-period="week">Week</a>
+    <a href="#" data-period="month">Month</a>
+  </div>
+  <p class="sub" style="margin-top:10px" id="period-label">Cups sold today</p>
+  <div id="sales-bars"></div>
+
+  <p class="goalrow"><b>Daily goal: 100 cups</b><b class="pct" id="goal-pct">0%</b></p>
+  <div class="bar goal"><b id="goal-bar" style="width:0%"></b></div>
+  <p class="sub" style="margin-top:6px" id="goal-note"></p>
+
+  <div class="grid3">
+    <div class="stat dk"><span>Today</span><span class="num" id="stat-today">0 cups</span></div>
+    <div class="stat"><span>Average (previous 7 days)</span><span class="num" id="stat-avg">0 cups</span></div>
+    <div class="stat"><span>Last 30 days</span><span class="num" id="stat-30">0 cups</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Income</h2>
+  <div class="grid3">
+    <div class="stat"><span>Cash today</span><span class="num" id="stat-cash">₱ 0</span></div>
+    <div class="stat"><span>GCash today</span><span class="num" id="stat-gcash">₱ 0</span></div>
+    <div class="stat dk"><span>Total today</span><span class="num" id="stat-total">₱ 0</span></div>
+  </div>
+  <p class="sub" id="sales-count" style="margin-top:10px"></p>
+</div>
+
+</main>
+<script>
+const GOAL = 100;
+let report = null;
+
+function renderBars(cups) {
+  const wrap = document.getElementById('sales-bars');
+  const entries = Object.entries(cups).filter(([, n]) => n > 0)
+                                  .sort((a, b) => b[1] - a[1]);
+  if (!entries.length) {
+    wrap.innerHTML = '<p class="sub">No cups sold in this period yet.</p>';
+    return;
+  }
+  const max = Math.max(...entries.map(([, n]) => n));
+  wrap.innerHTML = entries.map(([name, n]) => {
+    const pct = max ? Math.round(n / max * 100) : 0;
+    return `<div class="hb">
+      <span class="nm">${name}</span>
+      <div class="tr"><div class="fl" style="width:${pct}%;background:var(--br)">${n}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function totalCups(cups) {
+  return Object.values(cups).reduce((a, b) => a + b, 0);
+}
+
+function renderStats(r) {
+  const todayCups = r.todayCups ?? totalCups(r.cups || {});
+  const avg7 = r.avg7 ?? 0;
+  const last30 = r.last30 ?? 0;
+
+  document.getElementById('stat-today').textContent = todayCups + ' cups';
+  document.getElementById('stat-avg').textContent = avg7 + ' cups';
+  document.getElementById('stat-30').textContent = last30 + ' cups';
+
+  document.getElementById('stat-cash').textContent = '₱ ' + (r.cash || 0);
+  document.getElementById('stat-gcash').textContent = '₱ ' + (r.gcash || 0);
+  document.getElementById('stat-total').textContent = '₱ ' + (r.total || 0);
+
+  document.getElementById('sales-count').textContent =
+    `${r.count || 0} sale${r.count === 1 ? '' : 's'} recorded today · report is ${r.status || 'pending'}`;
+
+  const pct = Math.min(100, Math.round(todayCups / GOAL * 100));
+  document.getElementById('goal-pct').textContent = pct + '%';
+  document.getElementById('goal-bar').style.width = pct + '%';
+  document.getElementById('goal-note').textContent =
+    todayCups >= GOAL
+      ? `Goal reached — ${todayCups} cups today.`
+      : `${GOAL - todayCups} cup(s) to go for today's goal.`;
+}
+
+async function loadPeriod(p) {
+  document.querySelectorAll('.seg a').forEach(a =>
+    a.classList.toggle('on', a.dataset.period === p));
+
+  const labelMap = {
+    day:   'Cups sold today',
+    week:  'Cups sold in the last 7 days',
+    month: 'Cups sold in the last 30 days'
+  };
+  document.getElementById('period-label').textContent = labelMap[p] || 'Cups sold';
+
+  const r = await (await fetch('/api/report?t=' + Date.now())).json();
+  report = r;
+
+  if (p === 'day') {
+    renderBars(r.cups || {});
+  } else {
+    const db = await (await fetch('/api/db?t=' + Date.now())).json();
+    const history = db.history || {};
+    const keys = Object.keys(history).sort();
+    const windowDays = p === 'week' ? 7 : 30;
+    const recent = keys.slice(-windowDays);
+    const agg = {};
+    for (const k of recent) {
+      const c = history[k].cups || {};
+      for (const name in c) agg[name] = (agg[name] || 0) + c[name];
+    }
+    for (const name in (r.cups || {})) {
+      agg[name] = (agg[name] || 0) + r.cups[name];
+    }
+    renderBars(agg);
+  }
+
+  renderStats(r);
+}
+
+document.querySelectorAll('.seg a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    loadPeriod(a.dataset.period);
+  });
+});
+
+loadPeriod('day');
+</script>
+</body></html>

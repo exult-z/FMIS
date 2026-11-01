@@ -1,37 +1,37 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CupSion FMIS · Log in</title>
+<title>CupSion FMIS · Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+</head><body>
 <header><div class="logo">CS</div><h1>CupSion</h1></header>
-<main class="login"><div class="card"><h2>Log in</h2>
-<p class="sub">Choose who is using the system. The owner needs a PIN. Baristas can log in without one and only see what they need to take orders.</p>
-<!-- BACKEND: show this alert when the PIN is wrong, and remove the hidden attribute -->
-<p class="alert" role="alert" hidden>Wrong PIN. Try again or ask the owner to reset it.</p>
-<!-- The matching form appears with CSS only, depending on the selected role. -->
-<div class="rolepick" role="radiogroup" aria-label="Log in as">
-<input type="radio" name="role-choice" id="r-owner" value="owner">
-<label for="r-owner" class="rolecard"><b>Owner</b><small>Needs a PIN</small></label>
-<input type="radio" name="role-choice" id="r-barista" value="barista">
-<label for="r-barista" class="rolecard"><b>Barista</b><small>No PIN needed</small></label>
-<p class="pick-hint">Select Owner or Barista to continue.</p>
-
-<!-- DEMO: opens the full system. BACKEND: change to method="post" action="/login" so the PIN is not shown in the address bar, and check the PIN on the server -->
-<form class="owner-form" method="get" action="index.html">
-<input type="hidden" name="role" value="owner">
-<label class="field">Owner PIN
-<input type="password" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" required></label>
-<button type="submit" class="btn pri">Log in as owner</button>
-</form>
-
-<!-- DEMO: opens the limited barista pages (files that start with Barista_). BACKEND: list baristas from the database, then post to /login -->
-<form class="barista-form" method="get" action="Barista_index.html">
-<input type="hidden" name="role" value="barista">
-<label class="field">Your name
-<select name="barista"><option>Barista 1</option><option>Barista 2</option><option>Barista 3</option></select></label>
-<button type="submit" class="btn pri">Log in as barista</button>
-</form>
-</div></div></main></body></html>
+<main>
+<div class="card" style="max-width:420px;margin:40px auto">
+  <h2>Sign in</h2>
+  <form class="form" method="post" action="/login">
+    <label class="field">Role
+      <select name="role" id="role-select">
+        <option value="owner">Owner</option>
+        <option value="barista">Barista</option>
+      </select>
+    </label>
+    <label class="field" id="pin-field">Owner PIN
+      <input type="password" name="pin" placeholder="••••">
+    </label>
+    <label class="field" id="barista-field" style="display:none">Barista name
+      <input type="text" name="barista" placeholder="e.g. Juan">
+    </label>
+    <button type="submit" class="btn pri">Log in</button>
+  </form>
+  <p class="sub" style="margin-top:12px">Default owner PIN: <b>1234</b></p>
+</div>
+</main>
+<script>
+document.getElementById('role-select').addEventListener('change', e => {
+  const owner = e.target.value === 'owner';
+  document.getElementById('pin-field').style.display = owner ? '' : 'none';
+  document.getElementById('barista-field').style.display = owner ? 'none' : '';
+});
+</script>
+</body></html>

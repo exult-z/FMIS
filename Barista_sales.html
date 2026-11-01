@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Barista · Sales chart</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head><body data-role="barista">
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<span class="who">Barista · on shift</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Barista_index.html">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html">Inventory</a><a href="Barista_sales.html" class="on" aria-current="page">Sales chart</a></nav>
+<main>
+<div class="card"><h2>Cups per product</h2>
+<div class="seg" role="group" aria-label="Period">
+  <a href="#" data-period="day" class="on">Day</a>
+  <a href="#" data-period="week">Week</a>
+  <a href="#" data-period="month">Month</a>
+</div>
+<p class="sub" style="margin-top:10px" id="b-period-label">Cups sold today</p>
+<div id="b-sales-bars"></div>
+
+<p class="goalrow"><b>Daily goal: 100 cups</b><b class="pct" id="b-goal-pct">0%</b></p>
+<div class="bar goal"><b id="b-goal-bar" style="width:0%"></b></div>
+<p class="sub" style="margin-top:6px" id="b-goal-note"></p>
+
+<div class="grid3">
+  <div class="stat dk"><span>Today</span><span class="num" id="b-stat-today">0 cups</span></div>
+  <div class="stat"><span>Average (previous 7 days)</span><span class="num" id="b-stat-avg">0 cups</span></div>
+  <div class="stat"><span>Last 30 days</span><span class="num" id="b-stat-30">0 cups</span></div>
+</div>
+</div>
+</main>
+<script>
+const GOAL = 100;
+
+function renderBars(cups) {
+  const wrap = document.getElementById('b-sales-bars');
+  const entries = Object.entries(cups).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) {
+    wrap.innerHTML = '<p class="sub">No cups sold in this period yet.</p>';
+    return;
+  }
+  const max = Math.max(...entries.map(([, n]) => n));
+  wrap.innerHTML = entries.map(([name, n]) => {
+    const pct = max ? Math.round(n / max * 100) : 0;
+    return `<div class="hb">
+      <span class="nm">${name}</span>
+      <div class="tr"><div class="fl" style="width:${pct}%;background:var(--br)">${n}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderStats(r) {
+  const todayCups = r.todayCups ?? 0;
+  const avg7 = r.avg7 ?? 0;
+  const last30 = r.last30 ?? 0;
+
+  document.getElementById('b-stat-today').textContent = todayCups + ' cups';
+  document.getElementById('b-stat-avg').textContent = avg7 + ' cups';
+  document.getElementById('b-stat-30').textContent = last30 + ' cups';
+
+  const pct = Math.min(100, Math.round(todayCups / GOAL * 100));
+  document.getElementById('b-goal-pct').textContent = pct + '%';
+  document.getElementById('b-goal-bar').style.width = pct + '%';
+  document.getElementById('b-goal-note').textContent =
+    todayCups >= GOAL
+      ? `Goal reached — ${todayCups} cups today.`
+      : `${GOAL - todayCups} cup(s) to go for today's goal.`;
+}
+
+async function loadPeriod(p) {
+  document.querySelectorAll('.seg a').forEach(a =>
+    a.classList.toggle('on', a.dataset.period === p));
+
+  const labelMap = {
+    day:   'Cups sold today',
+    week:  'Cups sold in the last 7 days',
+    month: 'Cups sold in the last 30 days'
+  };
+  document.getElementById('b-period-label').textContent = labelMap[p] || 'Cups sold';
+
+  const r = await (await fetch('/api/report?t=' + Date.now())).json();
+
+  if (p === 'day') {
+    renderBars(r.cups || {});
+  } else {
+    const db = await (await fetch('/api/db?t=' + Date.now())).json();
+    const history = db.history || {};
+    const keys = Object.keys(history).sort();
+    const windowDays = p === 'week' ? 7 : 30;
+    const recent = keys.slice(-windowDays);
+    const agg = {};
+    for (const k of recent) {
+      const c = history[k].cups || {};
+      for (const name in c) agg[name] = (agg[name] || 0) + c[name];
+    }
+    for (const name in (r.cups || {})) agg[name] = (agg[name] || 0) + r.cups[name];
+    renderBars(agg);
+  }
+
+  renderStats(r);
+}
+
+document.querySelectorAll('.seg a').forEach(a => {
+  a.addEventListener('click', e => { e.preventDefault(); loadPeriod(a.dataset.period); });
+});
+
+loadPeriod('day');
+</script>
+</body></html>

@@ -4,28 +4,28 @@
 <title>CupSion FMIS · Audit log</title>
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-</head>
-<body data-role="owner">
-<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
+</head><body data-role="owner">
 <header><div class="logo">CS</div><h1>CupSion</h1>
-<!-- BACKEND: show the logged-in user's name and role -->
-<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
-<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" data-roles="owner">Menu &amp; prices</a><a href="report.html" data-roles="owner reviewer">Daily report</a><a href="logs.html" class="on" aria-current="page" data-roles="owner reviewer">Audit log</a></nav>
+<span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu & prices</a><a href="Report.html">Daily report</a><a href="Logs.html" class="on" aria-current="page">Audit log</a></nav>
 <main>
 <div class="card"><h2>Audit log</h2>
-<p class="sub">Every login, sale, void, price change, restock and wastage entry, with who did it and when. Entries cannot be edited or deleted.</p>
-<form class="form" method="get" action="#" style="margin-bottom:10px">
-<input type="date" name="date" aria-label="Date"><select name="user" aria-label="User"><option>All users</option><option>Owner</option><option>Barista</option><option>Reviewer</option></select><button class="btn sm">Filter</button></form>
+<p class="sub">Newest first. Every recorded action across the app.</p>
 <div class="scroll"><table>
-<tr><th>When</th><th>User</th><th>Action</th></tr>
-<!-- BACKEND: one row per log entry, newest first -->
-<tr><td>Nov 1, 10:12</td><td><span class="pill gcash">Barista</span></td><td>Recorded sale #4 (₱ 250, GCash)</td></tr>
-<tr><td>Nov 1, 10:09</td><td><span class="pill gcash">Barista</span></td><td>Recorded sale #3 (₱ 230, Cash)</td></tr>
-<tr><td>Nov 1, 09:40</td><td><span class="pill ok">Owner</span></td><td>Received 20 L of Fresh milk</td></tr>
-<tr><td>Nov 1, 09:15</td><td><span class="pill gcash">Barista</span></td><td>Logged wastage: 1 L of Fresh milk (Spoiled)</td></tr>
-<tr><td>Nov 1, 09:02</td><td><span class="pill ok">Owner</span></td><td>Changed price of Matcha Latte from ₱ 65 to ₱ 70</td></tr>
-<tr><td>Nov 1, 08:55</td><td><span class="pill gcash">Barista</span></td><td>Logged in</td></tr>
-<tr><td>Oct 31, 20:10</td><td><span class="pill cash">Reviewer</span></td><td>Verified daily report for Oct 31</td></tr>
-<tr><td>Oct 31, 19:50</td><td><span class="pill ok">Owner</span></td><td>Voided sale #121 (₱ 90) and returned stock</td></tr>
+<thead><tr><th>When</th><th>User</th><th>Action</th></tr></thead>
+<tbody id="logs-body"></tbody>
 </table></div></div>
-</main></body></html>
+</main>
+<script>
+(async () => {
+  const db = await (await fetch('/api/db?t=' + Date.now())).json();
+  const logs = db.logs || [];
+  const tbody = document.getElementById('logs-body');
+  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="3" class="sub">No activity yet.</td></tr>';
+  for (const l of logs) {
+    tbody.insertAdjacentHTML('beforeend',
+      `<tr><td>${l.when}</td><td>${l.user}</td><td>${l.action}</td></tr>`);
+  }
+})();
+</script>
+</body></html>

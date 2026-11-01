@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Barista · Inventory</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head><body data-role="barista">
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<span class="who">Barista · on shift</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Barista_index.html">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html" class="on" aria-current="page">Inventory</a><a href="Barista_sales.html">Sales chart</a></nav>
+<main>
+<div class="card"><h2>Stock & supplies</h2>
+<p class="sub">Live stock levels. Ask the owner to restock or add items.</p>
+<div class="scroll"><table>
+<thead><tr><th>Item</th><th>Stock</th><th>Status</th></tr></thead>
+<tbody id="b-inv-body"></tbody>
+</table></div></div>
+
+<div class="card"><h2>Log wastage</h2>
+<p class="sub">Spoiled or spilled stock is removed from inventory.</p>
+<form class="form" method="post" action="/inventory/waste">
+<label class="field">Item<select name="id" id="b-waste-item" required></select></label>
+<label class="field">Quantity<input type="number" name="qty" min="1" value="1" required></label>
+<label class="field">Reason<select name="reason">
+<option>Spoiled</option><option>Spilled</option><option>Expired</option><option>Other</option>
+</select></label>
+<button type="submit" class="btn pri">Log wastage</button>
+</form></div>
+</main>
+<script>
+(async () => {
+  const db = await (await fetch('/api/db?t=' + Date.now())).json();
+  const inv = db.inventory || [];
+  const tbody = document.getElementById('b-inv-body');
+  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="3" class="sub">No inventory records.</td></tr>';
+
+  for (const it of inv) {
+    const isLow = it.stock < 15;
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td><b>${it.name}</b></td>
+        <td><b class="${isLow ? 'text-low' : ''}">${it.stock} ${it.unit || ''}</b></td>
+        <td><span class="pill ${isLow ? 'low' : 'ok'}">${isLow ? 'Low' : 'OK'}</span></td>
+      </tr>`);
+  }
+
+  const sel = document.getElementById('b-waste-item');
+  sel.innerHTML = inv.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
+})();
+</script>
+</body></html>

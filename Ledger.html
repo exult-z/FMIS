@@ -5,35 +5,48 @@
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head><body data-role="owner">
-<!-- BACKEND: set data-role to "owner", "barista" or "reviewer" from the logged-in account. Hiding is only for display, so the server must also block actions the role is not allowed to do. -->
 <header><div class="logo">CS</div><h1>CupSion</h1>
-<!-- BACKEND: show the logged-in user's name and role -->
-<span class="who">Maria Santos · Owner</span><a class="out" href="login.html">Log out</a></header>
-<nav><a href="index.html" data-roles="owner barista">Take order</a><a href="ledger.html" class="on" aria-current="page">Daily ledger</a><a href="inventory.html">Inventory</a><a href="sales.html" data-roles="owner reviewer">Sales chart</a><a href="prices.html" data-roles="owner">Menu &amp; prices</a><a href="report.html" data-roles="owner reviewer">Daily report</a><a href="logs.html" data-roles="owner reviewer">Audit log</a></nav>
+<span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
+<nav><a href="Index.html">Take order</a><a href="Ledger.html" class="on" aria-current="page">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu &amp; prices</a><a href="Report.html">Daily report</a><a href="Logs.html">Audit log</a></nav>
 <main>
-<div class="card"><h2>Daily ledger</h2>
-<p class="sub">Sunday, November 1, 2026 · 4 sales</p>
+<div class="card"><h2>Recorded sales today</h2>
+<p class="sub" id="ledger-sub">Loading…</p>
 <div class="scroll"><table>
-<tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th><th data-roles="owner"></th></tr>
-<!-- BACKEND: one <tr> per sale today. The Void button is owner-only -->
-<tr><td>10:02</td><td>Matcha Latte × 1</td><td><span class="pill cash">Cash</span></td><td><b>₱ 70</b></td><td data-roles="owner"><button class="btn sm">Void</button></td></tr>
-<tr><td>10:05</td><td>Ube Strawberry Latte × 2</td><td><span class="pill gcash">GCash</span></td><td><b>₱ 180</b></td><td data-roles="owner"><button class="btn sm">Void</button></td></tr>
-<tr><td>10:09</td><td>Matcha Latte × 3 + 2 add-on</td><td><span class="pill cash">Cash</span></td><td><b>₱ 230</b></td><td data-roles="owner"><button class="btn sm">Void</button></td></tr>
-<tr><td>10:12</td><td>Ube Strawberry Latte × 1, Matcha Latte × 2, 2 add-on</td><td><span class="pill gcash">GCash</span></td><td><b>₱ 250</b></td><td data-roles="owner"><button class="btn sm">Void</button></td></tr>
+<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th><th></th></tr></thead>
+<tbody id="sales-table-body"></tbody>
 </table></div>
-<!-- BACKEND: bar width = channel total ÷ total income × 100 -->
 <div class="grid3">
-<div class="stat"><span>Cash</span><span class="num">₱ 300</span><div class="bar"><b style="width:41%"></b></div></div>
-<div class="stat"><span>GCash</span><span class="num">₱ 430</span><div class="bar gc"><b style="width:59%"></b></div></div>
-<div class="stat dk"><span>Total income</span><span class="num">₱ 730</span></div>
+  <div class="stat"><span>Cash</span><span class="num" id="l-cash">₱ 0</span><div class="bar"><b id="l-cash-bar" style="width:0%"></b></div></div>
+  <div class="stat"><span>GCash</span><span class="num" id="l-gcash">₱ 0</span><div class="bar gc"><b id="l-gcash-bar" style="width:0%"></b></div></div>
+  <div class="stat dk"><span>Total income</span><span class="num" id="l-total">₱ 0</span></div>
 </div></div>
-
-<div class="card" data-roles="owner reviewer"><h2>Today’s profit</h2>
-<p class="sub">Cost comes from each drink’s recipe. Wastage is counted as an expense.</p>
-<div class="grid3">
-<div class="stat"><span>Ingredient cost</span><span class="num">₱ 250</span></div>
-<div class="stat"><span>Wastage</span><span class="num">₱ 70</span></div>
-<div class="stat dk"><span>Gross profit</span><span class="num">₱ 410</span></div>
-</div></div>
-
-</main></body></html>
+</main>
+<script>
+(async () => {
+  const db = await (await fetch('/api/db?t=' + Date.now())).json();
+  const sales = db.sales || [];
+  const tbody = document.getElementById('sales-table-body');
+  tbody.innerHTML = sales.length ? '' : '<tr><td colspan="5" class="sub">No sales yet today.</td></tr>';
+  let cash = 0, gcash = 0;
+  for (const s of sales) {
+    if (s.method === 'Cash') cash += s.amount; else gcash += s.amount;
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr><td>${s.time}</td><td>${s.order}</td>
+      <td><span class="pill ${s.method === 'Cash' ? 'cash' : 'gcash'}">${s.method}</span></td>
+      <td><b>₱ ${s.amount}</b></td>
+      <td><form method="post" action="/void-sale" onsubmit="return confirm('Void sale #${s.id}?')">
+      <input type="hidden" name="saleId" value="${s.id}">
+      <button type="submit" class="btn sm">Void</button></form></td></tr>`);
+  }
+  const total = cash + gcash;
+  l_cash.textContent = '₱ ' + cash;
+  l_gcash.textContent = '₱ ' + gcash;
+  l_total.textContent = '₱ ' + total;
+  l_cash_bar.style.width = total ? (cash / total * 100) + '%' : '0%';
+  l_gcash_bar.style.width = total ? (gcash / total * 100) + '%' : '0%';
+  document.getElementById('ledger-sub').textContent =
+    new Date().toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' })
+    + ` · ${sales.length} sale${sales.length === 1 ? '' : 's'}`;
+})();
+</script>
+</body></html>
