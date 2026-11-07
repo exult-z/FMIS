@@ -7,7 +7,7 @@
 </head><body data-role="barista">
 <header><div class="logo">CS</div><h1>CupSion</h1>
 <span class="who">Barista · on shift</span><a class="out" href="/logout">Log out</a></header>
-<nav><a href="Barista_index.html" class="on" aria-current="page">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html">Inventory</a><a href="Barista_sales.html">Sales chart</a></nav>
+<nav><a href="Barista_index.html" class="on" aria-current="page">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html">Inventory</a><a href="Barista_sales.html">Sales chart</a><a href="Settings.html">Settings</a></nav>
 <form method="post" action="/record-sale" id="pos-form">
 <div class="card"><h2>New order</h2><p class="sub">Tap drinks to add to cart.</p>
 <div class="menu" id="pos-menu"></div></div>
@@ -66,5 +66,11 @@ function removeItem(name) {
   }));
   renderCart();
 })();
+document.getElementById('pos-form').addEventListener('submit', event => {
+  const summary = document.getElementById('hidden-items-input').value;
+  const amount = document.getElementById('hidden-amount-input').value;
+  if (!summary || !confirm(`Confirm recording this sale?\n${summary}\nTotal: ₱ ${amount}`)) event.preventDefault();
+});
 </script>
+<script src="user.js"></script>
 </body></html>

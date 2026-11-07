@@ -16,21 +16,25 @@
         <option value="barista">Barista</option>
       </select>
     </label>
-    <label class="field" id="pin-field">Owner PIN
-      <input type="password" name="pin" placeholder="••••">
+    <label class="field" id="username-field" hidden>Barista username
+      <input type="text" name="username" autocomplete="username" placeholder="Enter your username">
     </label>
-    <label class="field" id="barista-field" style="display:none">Barista name
-      <input type="text" name="barista" placeholder="e.g. Juan">
+    <label class="field">Password
+      <input type="password" name="password" autocomplete="current-password" required>
     </label>
+    <p class="sub" id="login-error" role="alert"></p>
     <button type="submit" class="btn pri">Log in</button>
   </form>
 </div>
 </main>
 <script>
 document.getElementById('role-select').addEventListener('change', e => {
-  const owner = e.target.value === 'owner';
-  document.getElementById('pin-field').style.display = owner ? '' : 'none';
-  document.getElementById('barista-field').style.display = owner ? 'none' : '';
+  const isBarista = e.target.value === 'barista';
+  document.getElementById('username-field').hidden = !isBarista;
+  document.querySelector('[name="username"]').required = isBarista;
 });
+const error = new URLSearchParams(location.search).get('error');
+if (error === 'wrong_password') document.getElementById('login-error').textContent = 'Incorrect username or password.';
+document.getElementById('role-select').dispatchEvent(new Event('change'));
 </script>
 </body></html>

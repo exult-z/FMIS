@@ -7,12 +7,12 @@
 </head><body data-role="owner">
 <header><div class="logo">CS</div><h1>CupSion</h1>
 <span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
-<nav><a href="Index.html">Take order</a><a href="Ledger.html" class="on" aria-current="page">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu &amp; prices</a><a href="Report.html">Daily report</a><a href="Logs.html">Audit log</a></nav>
+<nav><a href="Index.html">Take order</a><a href="Ledger.html" class="on" aria-current="page">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu &amp; prices</a><a href="Report.html">Daily report</a><a href="Logs.html">Audit log</a><a href="Settings.html">Settings</a></nav>
 <main>
 <div class="card"><h2>Recorded sales today</h2>
 <p class="sub" id="ledger-sub">Loading…</p>
 <div class="scroll"><table>
-<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th><th></th></tr></thead>
+<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th><th>Recorded by</th><th></th></tr></thead>
 <tbody id="sales-table-body"></tbody>
 </table></div>
 <div class="grid3">
@@ -22,11 +22,14 @@
 </div></div>
 </main>
 <script>
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const sales = db.sales || [];
   const tbody = document.getElementById('sales-table-body');
-  tbody.innerHTML = sales.length ? '' : '<tr><td colspan="5" class="sub">No sales yet today.</td></tr>';
+  tbody.innerHTML = sales.length ? '' : '<tr><td colspan="6" class="sub">No sales yet today.</td></tr>';
   
   let cash = 0, gcash = 0;
   for (const s of sales) {
@@ -46,6 +49,7 @@
       <tr><td>${s.time}</td><td>${s.order}</td>
       <td><span class="pill ${isCashUI ? 'cash' : 'gcash'}">${s.method}</span></td>
       <td><b>₱ ${s.amount}</b></td>
+      <td>${escapeHtml(s.recordedBy)}</td>
       <td><form method="post" action="/void-sale" onsubmit="return confirm('Void sale #${s.id}?')">
       <input type="hidden" name="saleId" value="${s.id}">
       <button type="submit" class="btn sm">Void</button></form></td></tr>`);
@@ -64,4 +68,5 @@
     + ` · ${sales.length} sale${sales.length === 1 ? '' : 's'}`;
 })();
 </script>
+<script src="user.js"></script>
 </body></html>

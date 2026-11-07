@@ -1,17 +1,19 @@
 const express = require('express');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
+const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(express.static(__dirname));
 
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 const DB_FILE = path.join(__dirname, 'cupsion.db');
 const db = new DatabaseSync(DB_FILE);
+const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_BARISTA_PASSWORD = 'barista123';
 
 // ---------- Schema (runs once) ----------
 db.exec(`
@@ -65,6 +67,21 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    username      TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    role          TEXT NOT NULL CHECK (role IN ('owner', 'barista')),
+    password_salt TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    must_change   INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    username   TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL
+  );
 `);
 
 // ---------- Seed (only if empty) ----------
@@ -112,10 +129,105 @@ function getSetting(key) {
   return row ? row.value : null;
 }
 
-function setSetting(key, value) {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(key, value);
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return {
+    salt,
+    hash: crypto.scryptSync(password, salt, 64).toString('hex')
+  };
 }
+
+function passwordMatches(password, salt, expectedHash) {
+  const actual = Buffer.from(hashPassword(password, salt).hash, 'hex');
+  const expected = Buffer.from(expectedHash, 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+const salesColumns = db.prepare('PRAGMA table_info(sales)').all().map(column => column.name);
+if (!salesColumns.includes('recorded_by')) {
+  db.exec("ALTER TABLE sales ADD COLUMN recorded_by TEXT NOT NULL DEFAULT 'Owner'");
+}
+
+if (!db.prepare("SELECT username FROM users WHERE role = 'owner'").get()) {
+  const initialPassword = getSetting('ownerPin') || '1234';
+  const credentials = hashPassword(initialPassword);
+  db.prepare('INSERT INTO users (username, name, role, password_salt, password_hash) VALUES (?, ?, ?, ?, ?)')
+    .run('owner', 'Maria Santos', 'owner', credentials.salt, credentials.hash);
+}
+db.prepare("DELETE FROM settings WHERE key IN ('ownerPin', 'ownerName')").run();
+
+function sessionUser(req) {
+  const cookie = (req.headers.cookie || '').split(';').map(part => part.trim())
+    .find(part => part.startsWith('fmis_session='));
+  if (!cookie) return null;
+
+  const token = cookie.slice('fmis_session='.length);
+  if (!/^[\w-]{43}$/.test(token)) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const row = db.prepare(`
+    SELECT u.username, u.name, u.role, u.must_change
+    FROM sessions s JOIN users u ON u.username = s.username
+    WHERE s.token_hash = ? AND s.expires_at > ?
+  `).get(tokenHash, Date.now());
+  if (!row) {
+    db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
+    return null;
+  }
+  return row;
+}
+
+function startSession(res, username) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = Date.now() + SESSION_TTL;
+  db.prepare('INSERT INTO sessions (token_hash, username, expires_at) VALUES (?, ?, ?)')
+    .run(tokenHash, username, expiresAt);
+  res.setHeader('Set-Cookie', `fmis_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`);
+}
+
+function currentSessionHash(req) {
+  const cookie = (req.headers.cookie || '').split(';').map(part => part.trim())
+    .find(part => part.startsWith('fmis_session='));
+  if (!cookie) return null;
+  const token = cookie.slice('fmis_session='.length);
+  return /^[\w-]{43}$/.test(token) ? crypto.createHash('sha256').update(token).digest('hex') : null;
+}
+
+function requireOwner(req, res, next) {
+  if (req.user && req.user.role === 'owner') return next();
+  return res.status(403).send('Owner access required.');
+}
+
+app.use((req, res, next) => {
+  const pathname = new URL(req.originalUrl, 'http://localhost').pathname;
+  if (pathname === '/login' || pathname.toLowerCase() === '/login.html' || pathname === '/logout') {
+    return next();
+  }
+  if (/\.(css|js|png|jpe?g|gif|svg|ico|woff2?)$/i.test(pathname)) return next();
+
+  req.user = sessionUser(req);
+  if (!req.user) {
+    if (pathname.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required.' });
+    return res.redirect('/Login.html');
+  }
+
+  const lowerPath = pathname.toLowerCase();
+  if (req.user.must_change && lowerPath !== '/settings.html' && lowerPath !== '/api/me' && lowerPath !== '/change-password') {
+    if (pathname.startsWith('/api/')) return res.status(403).json({ error: 'Change your default password first.' });
+    return res.redirect('/Settings.html?must_change=1');
+  }
+
+  if (req.user.role === 'barista' &&
+      ['/index.html', '/ledger.html', '/inventory.html', '/sales.html', '/prices.html', '/report.html', '/logs.html'].includes(lowerPath)) {
+    return res.redirect('/Barista_index.html');
+  }
+  if (req.user.role === 'owner' && lowerPath.startsWith('/barista_')) {
+    return res.redirect('/Index.html');
+  }
+  next();
+});
+
+app.get('/', (req, res) => res.redirect(req.user ? (req.user.role === 'barista' ? '/Barista_index.html' : '/Index.html') : '/Login.html'));
+app.use(express.static(__dirname));
 
 function getReport() {
   const rows = db.prepare('SELECT key, value FROM report_state').all();
@@ -139,10 +251,6 @@ function setReport(status, signedBy, signedAt, date) {
 
 function addLog(user, action) {
   db.prepare('INSERT INTO logs (when_, user, action) VALUES (?, ?, ?)').run(stamp(), user, action);
-}
-
-function ownerName() {
-  return getSetting('ownerName') || 'Maria Santos';
 }
 
 function parseOrder(summary) {
@@ -187,8 +295,8 @@ function historyObject() {
     `).all(d.date);
     for (const c of cupRows) cups[c.name] = c.qty;
 
-    const sales = db.prepare(`
-      SELECT s.id, s.time, s.method, s.amount,
+  const sales = db.prepare(`
+      SELECT s.id, s.time, s.method, s.amount, s.recorded_by AS recordedBy,
              GROUP_CONCAT(si.name || ' × ' || si.qty, ', ') AS "order"
       FROM sales s
       LEFT JOIN sale_items si ON si.sale_id = s.id
@@ -213,7 +321,7 @@ app.get('/api/db', (req, res) => {
   const inventory = db.prepare('SELECT id, name, unit, stock FROM inventory').all();
 
   const sales = db.prepare(`
-    SELECT s.id, s.time, s.method, s.amount,
+    SELECT s.id, s.time, s.method, s.amount, s.recorded_by AS recordedBy,
            GROUP_CONCAT(si.name || ' × ' || si.qty, ', ') AS "order"
     FROM sales s
     LEFT JOIN sale_items si ON si.sale_id = s.id
@@ -227,7 +335,7 @@ app.get('/api/db', (req, res) => {
 
   res.json({
     settings: {},
-    currentUser: { role: 'owner', name: ownerName() },
+    currentUser: { role: req.user.role, name: req.user.name, username: req.user.username },
     menu, inventory, sales, logs,
     reportStatus: rep.status,
     reportSignedBy: rep.signedBy,
@@ -237,7 +345,17 @@ app.get('/api/db', (req, res) => {
   });
 });
 
-app.get('/api/me', (req, res) => res.json({ role: 'owner', name: ownerName() }));
+app.get('/api/me', (req, res) => res.json({
+  role: req.user.role,
+  name: req.user.name,
+  username: req.user.username,
+  mustChange: Boolean(req.user.must_change)
+}));
+
+app.get('/api/users', requireOwner, (req, res) => {
+  const users = db.prepare("SELECT username, name FROM users WHERE role = 'barista' ORDER BY name").all();
+  res.json({ users });
+});
 
 app.get('/api/report', (req, res) => {
   const today = todayKey();
@@ -304,24 +422,68 @@ app.get('/api/report', (req, res) => {
 
 // ---------- Auth ----------
 app.post('/login', (req, res) => {
-  const { role, pin, barista } = req.body;
-  if (role === 'owner') {
-    if (String(pin) === String(getSetting('ownerPin'))) {
-      setSetting('ownerName', 'Maria Santos');
-      return res.redirect('/Index.html');
-    }
-    return res.redirect('/Login.html?error=wrong_pin');
+  const role = req.body.role;
+  const username = role === 'owner' ? 'owner' : String(req.body.username || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  const user = db.prepare('SELECT username, name, role, password_salt, password_hash, must_change FROM users WHERE username = ? AND role = ?')
+    .get(username, role);
+
+  if (!user || !passwordMatches(password, user.password_salt, user.password_hash)) {
+    return res.redirect('/Login.html?error=wrong_password');
   }
-  if (role === 'barista') {
-    setSetting('ownerName', barista || 'Barista 1');
-    return res.redirect('/Barista_index.html');
-  }
-  res.redirect('/Login.html');
+
+  startSession(res, user.username);
+  const destination = user.must_change
+    ? '/Settings.html?must_change=1'
+    : (user.role === 'barista' ? '/Barista_index.html' : '/Index.html');
+  res.redirect(destination);
 });
 
 app.get('/logout', (req, res) => {
-  setSetting('ownerName', 'Guest');
+  const tokenHash = currentSessionHash(req);
+  if (tokenHash) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
+  res.setHeader('Set-Cookie', 'fmis_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
   res.redirect('/Login.html');
+});
+
+app.post('/register-barista', requireOwner, (req, res) => {
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const name = String(req.body.name || '').trim();
+  if (!/^[a-z0-9._-]{3,30}$/.test(username) || !name || name.length > 80) {
+    return res.redirect('/Settings.html?error=invalid_barista');
+  }
+  if (db.prepare('SELECT username FROM users WHERE username = ?').get(username)) {
+    return res.redirect('/Settings.html?error=duplicate_username');
+  }
+
+  const credentials = hashPassword(DEFAULT_BARISTA_PASSWORD);
+  db.prepare('INSERT INTO users (username, name, role, password_salt, password_hash, must_change) VALUES (?, ?, ?, ?, ?, 1)')
+    .run(username, name, 'barista', credentials.salt, credentials.hash);
+  addLog(req.user.name, `Registered barista account "${name}" (${username})`);
+  res.redirect('/Settings.html?registered=1');
+});
+
+app.post('/change-password', (req, res) => {
+  const currentPassword = String(req.body.currentPassword || '');
+  const newPassword = String(req.body.newPassword || '');
+  const confirmPassword = String(req.body.confirmPassword || '');
+  const user = db.prepare('SELECT password_salt, password_hash FROM users WHERE username = ?').get(req.user.username);
+  if (!passwordMatches(currentPassword, user.password_salt, user.password_hash)) {
+    return res.redirect('/Settings.html?error=wrong_current_password');
+  }
+  if (newPassword.length < 8) return res.redirect('/Settings.html?error=password_too_short');
+  if (newPassword !== confirmPassword) return res.redirect('/Settings.html?error=password_mismatch');
+
+  const credentials = hashPassword(newPassword);
+  db.prepare('UPDATE users SET password_salt = ?, password_hash = ?, must_change = 0 WHERE username = ?')
+    .run(credentials.salt, credentials.hash, req.user.username);
+
+  const oldSessionHash = currentSessionHash(req);
+  db.prepare('DELETE FROM sessions WHERE username = ?').run(req.user.username);
+  startSession(res, req.user.username);
+  if (oldSessionHash) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(oldSessionHash);
+  addLog(req.user.name, 'Changed account password');
+  res.redirect('/Settings.html?password_changed=1');
 });
 
 // ---------- Sales ----------
@@ -331,7 +493,7 @@ app.post('/record-sale', (req, res) => {
   const method  = (String(req.body.method || '').toLowerCase() === 'gcash') ? 'GCash' : 'Cash';
 
   if (!summary || !amount || amount <= 0) {
-    return res.redirect('/Index.html?error=empty');
+    return res.redirect(req.user.role === 'barista' ? '/Barista_index.html?error=empty' : '/Index.html?error=empty');
   }
 
   const items = parseOrder(summary);
@@ -340,8 +502,8 @@ app.post('/record-sale', (req, res) => {
 
   try {
     db.exec('BEGIN');
-    const info = db.prepare('INSERT INTO sales (time, date, method, amount) VALUES (?, ?, ?, ?)')
-      .run(timeStr, today, method, amount);
+    const info = db.prepare('INSERT INTO sales (time, date, method, amount, recorded_by) VALUES (?, ?, ?, ?, ?)')
+      .run(timeStr, today, method, amount, req.user.name);
     const saleId = info.lastInsertRowid;
 
     const addItem = db.prepare('INSERT INTO sale_items (sale_id, name, qty, is_cup, price) VALUES (?, ?, ?, ?, ?)');
@@ -352,23 +514,23 @@ app.post('/record-sale', (req, res) => {
     const cupsCount = items.filter(it => isCupItem(it.name)).reduce((s, it) => s + it.qty, 0);
     db.prepare("UPDATE inventory SET stock = MAX(0, stock - ?) WHERE LOWER(name) = 'cups'").run(cupsCount);
 
-    addLog(ownerName(), `Recorded sale #${saleId} (${summary} – ₱ ${amount}, ${method})`);
+    addLog(req.user.name, `Recorded sale #${saleId} (${summary} – ₱ ${amount}, ${method})`);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
     console.error(e);
-    return res.redirect('/Index.html?error=server');
+    return res.redirect(req.user.role === 'barista' ? '/Barista_index.html?error=server' : '/Index.html?error=server');
   }
 
-  res.redirect('/Index.html');
+  res.redirect(req.user.role === 'barista' ? '/Barista_index.html' : '/Index.html');
 });
 
-app.post('/void-sale', (req, res) => {
+app.post('/void-sale', requireOwner, (req, res) => {
   const id = parseInt(req.body.saleId, 10);
   const sale = db.prepare('SELECT id, amount, method FROM sales WHERE id = ?').get(id);
 
   if (!sale) {
-    addLog(ownerName(), `Attempted to void missing sale #${id}`);
+    addLog(req.user.name, `Attempted to void missing sale #${id}`);
     return res.redirect('/Ledger.html');
   }
 
@@ -380,7 +542,7 @@ app.post('/void-sale', (req, res) => {
     db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(id);
     db.prepare('DELETE FROM sales WHERE id = ?').run(id);
     db.prepare("UPDATE inventory SET stock = stock + ? WHERE LOWER(name) = 'cups'").run(cupsToReturn);
-    addLog(ownerName(), `Voided sale #${id} (₱ ${sale.amount}, ${sale.method}); ${cupsToReturn} cup(s) returned`);
+    addLog(req.user.name, `Voided sale #${id} (₱ ${sale.amount}, ${sale.method}); ${cupsToReturn} cup(s) returned`);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -390,7 +552,7 @@ app.post('/void-sale', (req, res) => {
 });
 
 // ---------- Inventory ----------
-app.post('/inventory/add', (req, res) => {
+app.post('/inventory/add', requireOwner, (req, res) => {
   const name = (req.body.name || '').trim();
   const unitChoice = (req.body.unit || 'units').trim();
   const unit = unitChoice === 'Other' ? (req.body.customUnit || '').trim() : unitChoice;
@@ -403,27 +565,27 @@ app.post('/inventory/add', (req, res) => {
 
   db.prepare('INSERT INTO inventory (id, name, unit, stock) VALUES (?, ?, ?, ?)')
     .run('inv-' + Date.now(), name, unit, stock);
-  addLog(ownerName(), `Added inventory item "${name}" (${stock} ${unit})`);
+  addLog(req.user.name, `Added inventory item "${name}" (${stock} ${unit})`);
   res.redirect('/Inventory.html');
 });
 
-app.post('/inventory/delete', (req, res) => {
+app.post('/inventory/delete', requireOwner, (req, res) => {
   const id = req.body.id;
   const item = db.prepare('SELECT name FROM inventory WHERE id = ?').get(id);
   if (item) {
     db.prepare('DELETE FROM inventory WHERE id = ?').run(id);
-    addLog(ownerName(), `Removed inventory item "${item.name}"`);
+    addLog(req.user.name, `Removed inventory item "${item.name}"`);
   }
   res.redirect('/Inventory.html');
 });
 
-app.post('/inventory/restock', (req, res) => {
+app.post('/inventory/restock', requireOwner, (req, res) => {
   const id = req.body.id;
   const qty = parseInt(req.body.qty, 10) || 0;
   const item = db.prepare('SELECT name, unit FROM inventory WHERE id = ?').get(id);
   if (item && qty > 0) {
     db.prepare('UPDATE inventory SET stock = stock + ? WHERE id = ?').run(qty, id);
-    addLog(ownerName(), `Restocked ${qty} ${item.unit} of ${item.name}`);
+    addLog(req.user.name, `Restocked ${qty} ${item.unit} of ${item.name}`);
   }
   res.redirect('/Inventory.html');
 });
@@ -435,13 +597,13 @@ app.post('/inventory/waste', (req, res) => {
   const item = db.prepare('SELECT name, unit FROM inventory WHERE id = ?').get(id);
   if (item && qty > 0) {
     db.prepare('UPDATE inventory SET stock = MAX(0, stock - ?) WHERE id = ?').run(qty, id);
-    addLog(ownerName(), `Logged wastage: ${qty} ${item.unit} of ${item.name} (${reason})`);
+    addLog(req.user.name, `Logged wastage: ${qty} ${item.unit} of ${item.name} (${reason})`);
   }
-  res.redirect('/Inventory.html');
+  res.redirect(req.user.role === 'barista' ? '/Barista_inventory.html' : '/Inventory.html');
 });
 
 // ---------- Menu ----------
-app.post('/menu/update', (req, res) => {
+app.post('/menu/update', requireOwner, (req, res) => {
   const id = req.body.id;
   const name = (req.body.name || '').trim();
   const price = parseInt(req.body.price, 10);
@@ -449,42 +611,42 @@ app.post('/menu/update', (req, res) => {
   const existing = db.prepare('SELECT id FROM menu WHERE id = ?').get(id);
   if (!existing) return res.redirect('/Prices.html?error=missing');
   db.prepare('UPDATE menu SET name = ?, price = ? WHERE id = ?').run(name, price, id);
-  addLog(ownerName(), `Updated menu item "${name}" to ₱ ${price}`);
+  addLog(req.user.name, `Updated menu item "${name}" to ₱ ${price}`);
   res.redirect('/Prices.html');
 });
 
-app.post('/menu/add', (req, res) => {
+app.post('/menu/add', requireOwner, (req, res) => {
   const name = (req.body.name || '').trim();
   const price = parseInt(req.body.price, 10);
   const isCup = req.body.isCup === '0' ? 0 : 1;
   if (!name || !price || price <= 0) return res.redirect('/Prices.html?error=bad');
   const id = 'it-' + Date.now();
   db.prepare('INSERT INTO menu (id, name, price, is_cup) VALUES (?, ?, ?, ?)').run(id, name, price, isCup);
-  addLog(ownerName(), `Added menu item "${name}" at ₱ ${price}${isCup ? '' : ' (not a cup)'}`);
+  addLog(req.user.name, `Added menu item "${name}" at ₱ ${price}${isCup ? '' : ' (not a cup)'}`);
   res.redirect('/Prices.html');
 });
 
-app.post('/menu/delete', (req, res) => {
+app.post('/menu/delete', requireOwner, (req, res) => {
   const id = req.body.id;
   const item = db.prepare('SELECT name FROM menu WHERE id = ?').get(id);
   if (item) {
     db.prepare('DELETE FROM menu WHERE id = ?').run(id);
-    addLog(ownerName(), `Removed menu item "${item.name}"`);
+    addLog(req.user.name, `Removed menu item "${item.name}"`);
   }
   res.redirect('/Prices.html');
 });
 
 // ---------- Report ----------
-app.post('/verify-report', (req, res) => {
+app.post('/verify-report', requireOwner, (req, res) => {
   const name = (req.body.signedBy || '').trim() || 'Maria Santos';
   setReport('Verified', name, stamp(), todayKey());
-  addLog(ownerName(), `Verified & signed off daily report as ${name}`);
+  addLog(req.user.name, `Verified & signed off daily report as ${name}`);
   res.redirect('/Report.html');
 });
 
-app.post('/unverify-report', (req, res) => {
+app.post('/unverify-report', requireOwner, (req, res) => {
   setReport('Pending review', null, null);
-  addLog(ownerName(), 'Reset report verification (pending review)');
+  addLog(req.user.name, 'Reset report verification (pending review)');
   res.redirect('/Report.html');
 });
 

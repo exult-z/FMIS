@@ -7,7 +7,7 @@
 </head><body data-role="barista">
 <header><div class="logo">CS</div><h1>CupSion</h1>
 <span class="who">Barista · on shift</span><a class="out" href="/logout">Log out</a></header>
-<nav><a href="Barista_index.html">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html">Inventory</a><a href="Barista_sales.html" class="on" aria-current="page">Sales chart</a></nav>
+<nav><a href="Barista_index.html">Take order</a><a href="Barista_ledger.html">My ledger</a><a href="Barista_inventory.html">Inventory</a><a href="Barista_sales.html" class="on" aria-current="page">Sales chart</a><a href="Settings.html">Settings</a></nav>
 <main>
 <div class="card"><h2>Cups per product</h2>
 <div class="seg" role="group" aria-label="Period">
@@ -106,4 +106,5 @@ document.querySelectorAll('.seg a').forEach(a => {
 
 loadPeriod('day');
 </script>
+<script src="user.js"></script>
 </body></html>

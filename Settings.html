@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Account settings</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head><body data-role="owner">
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<span class="who">Account settings</span><a class="out" href="/logout">Log out</a></header>
+<nav>
+  <a href="Index.html" data-roles="owner">Take order</a>
+  <a href="Ledger.html" data-roles="owner">Daily ledger</a>
+  <a href="Inventory.html" data-roles="owner">Inventory</a>
+  <a href="Sales.html" data-roles="owner">Sales chart</a>
+  <a href="Prices.html" data-roles="owner">Menu &amp; prices</a>
+  <a href="Report.html" data-roles="owner">Daily report</a>
+  <a href="Logs.html" data-roles="owner">Audit log</a>
+  <a href="Barista_index.html" data-roles="barista">Take order</a>
+  <a href="Barista_ledger.html" data-roles="barista">My ledger</a>
+  <a href="Barista_inventory.html" data-roles="barista">Inventory</a>
+  <a href="Barista_sales.html" data-roles="barista">Sales chart</a>
+  <a href="Settings.html" class="on" aria-current="page">Settings</a>
+</nav>
+<main>
+  <p id="settings-message" class="alert" role="status" hidden></p>
+
+  <div class="card">
+    <h2>Change password</h2>
+    <p class="sub">Use at least 8 characters. Your current password is required to save a new one.</p>
+    <form class="form" method="post" action="/change-password">
+      <label class="field">Current password
+        <input type="password" name="currentPassword" autocomplete="current-password" required>
+      </label>
+      <label class="field">New password
+        <input type="password" name="newPassword" autocomplete="new-password" minlength="8" required>
+      </label>
+      <label class="field">Confirm new password
+        <input type="password" name="confirmPassword" autocomplete="new-password" minlength="8" required>
+      </label>
+      <button type="submit" class="btn pri">Update password</button>
+    </form>
+  </div>
+
+  <section class="card" data-roles="owner">
+    <h2>Register a barista</h2>
+    <p class="sub">New accounts start with the temporary password <b>barista123</b>. Give it to the barista so they can sign in and change it in Settings.</p>
+    <form class="form" method="post" action="/register-barista">
+      <label class="field">Barista name
+        <input type="text" name="name" maxlength="80" required>
+      </label>
+      <label class="field">Username
+        <input type="text" name="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9._-]+" autocomplete="off" required>
+      </label>
+      <button type="submit" class="btn pri">Register barista</button>
+    </form>
+    <div class="scroll" style="margin-top:14px">
+      <table>
+        <thead><tr><th>Barista</th><th>Username</th></tr></thead>
+        <tbody id="barista-users"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script src="user.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const messages = {
+  must_change: 'This is your temporary password. Change it before continuing.',
+  password_changed: 'Your password has been updated.',
+  registered: 'Barista account registered. Share the temporary password shown above with the new barista.',
+  wrong_current_password: 'The current password is incorrect.',
+  password_too_short: 'The new password must be at least 8 characters.',
+  password_mismatch: 'The new passwords do not match.',
+  invalid_barista: 'Enter a valid barista name and username (3–30 letters, numbers, dots, underscores, or hyphens).',
+  duplicate_username: 'That username is already registered.'
+};
+const messageKey = params.get('must_change') === '1' ? 'must_change' : params.get('error') || params.get('password_changed') ? (params.get('error') || 'password_changed') : params.get('registered') ? 'registered' : '';
+if (messages[messageKey]) {
+  const alert = document.getElementById('settings-message');
+  alert.textContent = messages[messageKey];
+  alert.hidden = false;
+  if (messageKey === 'must_change') alert.classList.add('okk');
+}
+
+(async () => {
+  const me = await (await fetch('/api/me')).json();
+  if (me.role !== 'owner') return;
+  const response = await fetch('/api/users');
+  if (!response.ok) throw new Error('Unable to load barista accounts.');
+  const { users } = await response.json();
+  const tbody = document.getElementById('barista-users');
+  tbody.innerHTML = users.length
+    ? users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.username)}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="sub">No barista accounts registered.</td></tr>';
+})();
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+}
+</script>
+</body></html>

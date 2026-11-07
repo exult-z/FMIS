@@ -7,7 +7,7 @@
 </head><body data-role="owner">
 <header><div class="logo">CS</div><h1>CupSion</h1>
 <span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
-<nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu & prices</a><a href="Report.html">Daily report</a><a href="Logs.html" class="on" aria-current="page">Audit log</a></nav>
+<nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu & prices</a><a href="Report.html">Daily report</a><a href="Logs.html" class="on" aria-current="page">Audit log</a><a href="Settings.html">Settings</a></nav>
 <main>
 <div class="card"><h2>Audit log</h2>
 <p class="sub">Newest first. Every recorded action across the app.</p>
@@ -17,6 +17,9 @@
 </table></div></div>
 </main>
 <script>
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const logs = db.logs || [];
@@ -29,8 +32,9 @@
     const paymentMethod = paymentMatch ? paymentMatch[1] : '—';
     const action = paymentMatch ? l.action.replace(paymentMatch[0], '') : l.action;
     tbody.insertAdjacentHTML('beforeend',
-      `<tr><td>${l.when}</td><td>${l.user}</td><td>${paymentMethod}</td><td>${action}</td></tr>`);
+      `<tr><td>${escapeHtml(l.when)}</td><td>${escapeHtml(l.user)}</td><td>${paymentMethod}</td><td>${escapeHtml(action)}</td></tr>`);
   }
 })();
 </script>
+<script src="user.js"></script>
 </body></html>
