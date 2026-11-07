@@ -292,7 +292,28 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => res.redirect(req.user ? (req.user.role === 'barista' ? '/Barista_index.html' : '/Index.html') : '/Login.html'));
-app.use(express.static(path.join(__dirname, 'public')));
+const PUBLIC_FILES = new Map([
+  ['/barista_index.html', 'Barista_index.html'],
+  ['/barista_inventory.html', 'Barista_inventory.html'],
+  ['/barista_ledger.html', 'Barista_ledger.html'],
+  ['/barista_sales.html', 'Barista_sales.html'],
+  ['/index.html', 'Index.html'],
+  ['/inventory.html', 'Inventory.html'],
+  ['/ledger.html', 'Ledger.html'],
+  ['/login.html', 'Login.html'],
+  ['/logs.html', 'Logs.html'],
+  ['/prices.html', 'Prices.html'],
+  ['/report.html', 'Report.html'],
+  ['/sales.html', 'Sales.html'],
+  ['/settings.html', 'Settings.html'],
+  ['/styles.css', 'Styles.css']
+]);
+
+app.get('*', (req, res, next) => {
+  const file = PUBLIC_FILES.get(req.path.toLowerCase());
+  if (!file) return next();
+  res.sendFile(path.join(__dirname, file));
+});
 
 function getReport() {
   const rows = db.prepare('SELECT key, value FROM report_state').all();
