@@ -12,7 +12,7 @@
 <div class="card"><h2>Recorded sales today</h2>
 <p class="sub" id="ledger-sub">Loading…</p>
 <div class="scroll"><table>
-<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th><th>Recorded by</th><th></th></tr></thead>
+<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Cash details</th><th>Amount</th><th>Recorded by</th><th></th></tr></thead>
 <tbody id="sales-table-body"></tbody>
 </table></div>
 <div class="grid3">
@@ -29,7 +29,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character =>
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const sales = db.sales || [];
   const tbody = document.getElementById('sales-table-body');
-  tbody.innerHTML = sales.length ? '' : '<tr><td colspan="6" class="sub">No sales yet today.</td></tr>';
+  tbody.innerHTML = sales.length ? '' : '<tr><td colspan="7" class="sub">No sales yet today.</td></tr>';
   
   let cash = 0, gcash = 0;
   for (const s of sales) {
@@ -48,6 +48,9 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character =>
     tbody.insertAdjacentHTML('beforeend', `
       <tr><td>${s.time}</td><td>${s.order}</td>
       <td><span class="pill ${isCashUI ? 'cash' : 'gcash'}">${s.method}</span></td>
+      <td>${isCashUI
+        ? s.cashReceived == null ? 'Cash details unavailable' : `Received ₱ ${s.cashReceived} · Change ₱ ${s.changeGiven}`
+        : '—'}</td>
       <td><b>₱ ${s.amount}</b></td>
       <td>${escapeHtml(s.recordedBy)}</td>
       <td><form method="post" action="/void-sale">

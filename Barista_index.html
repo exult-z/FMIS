@@ -15,6 +15,7 @@
 <div class="menu" id="pos-menu"></div></div>
 
 <div class="card"><h2>Current order</h2>
+<div class="cart-columns"><span>Quantity</span><span>Product</span><span>Total</span></div>
 <div id="cart-items"></div>
 <div class="total"><b>Total</b><span class="num" id="cart-total">₱ 0</span></div>
 <input type="hidden" name="orderSummary" id="hidden-items-input">
@@ -24,8 +25,15 @@
 <div class="acts">
 <button type="button" class="btn cash on" id="btn-cash" onclick="setPayment('Cash')">Cash</button>
 <button type="button" class="btn gcash" id="btn-gcash" onclick="setPayment('GCash')">GCash</button>
-<button type="submit" class="btn pri">Record sale</button>
-</div></div>
+</div>
+<div class="cash-details" id="cash-details">
+  <label class="field" for="cash-received">Cash received
+    <input id="cash-received" name="cashReceived" type="number" min="0" step="1" inputmode="numeric" required>
+  </label>
+  <div class="cash-change">Change due <b id="cash-change">₱ 0</b></div>
+</div>
+<div class="acts"><button type="submit" class="btn pri">Record sale</button></div>
+</div>
 </form>
 </main>
 <script>
@@ -37,6 +45,22 @@ function setPayment(method) {
   document.getElementById('hidden-method-input').value = method;
   document.getElementById('btn-cash').classList.toggle('on', method === 'Cash');
   document.getElementById('btn-gcash').classList.toggle('on', method === 'GCash');
+  const cashDetails = document.getElementById('cash-details');
+  const cashReceived = document.getElementById('cash-received');
+  const isCash = method === 'Cash';
+  cashDetails.hidden = !isCash;
+  cashReceived.required = isCash;
+  cashReceived.disabled = !isCash;
+  updateCashChange();
+}
+function updateCashChange() {
+  const total = Number(document.getElementById('hidden-amount-input').value);
+  const received = Number(document.getElementById('cash-received').value);
+  const change = received - total;
+  document.getElementById('cash-change').textContent =
+    Number.isFinite(change) && change < 0
+      ? 'Short by ₱ ' + Math.abs(change)
+      : '₱ ' + (Number.isFinite(change) ? change : 0);
 }
 function renderCart() {
   const container = document.getElementById('cart-items');
@@ -46,16 +70,18 @@ function renderCart() {
     const item = cart[id]; const sub = item.price * item.qty;
     total += sub; summary.push(item.name + ' × ' + item.qty);
     container.insertAdjacentHTML('beforeend',
-      `<div class="row"><span class="qty">× ${item.qty}</span><span class="g">${escapeHtml(item.name)}</span><b>₱ ${sub}</b><button type="button" class="x" data-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(item.name)}">−</button></div>`);
+      `<div class="row cart-row"><span class="qty-controls"><span class="qty">${item.qty}</span><button type="button" class="x" data-id="${escapeHtml(id)}" aria-label="Remove one ${escapeHtml(item.name)}">−</button></span><span class="g">${escapeHtml(item.name)}</span><b class="line-total">₱ ${sub}</b></div>`);
   }
   if (!Object.keys(cart).length) container.innerHTML = '<p class="sub">No items in current order. Tap a drink above.</p>';
   container.querySelectorAll('.x').forEach(button => button.addEventListener('click', () => removeItem(button.dataset.id)));
   document.getElementById('cart-total').textContent = '₱ ' + total;
   document.getElementById('hidden-items-input').value = summary.join(', ');
   document.getElementById('hidden-amount-input').value = total;
+  document.getElementById('cash-received').min = total;
   document.getElementById('hidden-order-data').value = JSON.stringify(
     Object.entries(cart).map(([id, item]) => ({ id, qty: item.qty }))
   );
+  updateCashChange();
 }
 function removeItem(id) {
   if (!cart[id]) return;
@@ -79,12 +105,14 @@ function removeItem(id) {
 document.getElementById('pos-form').addEventListener('submit', event => {
   if (!document.getElementById('hidden-order-data').value) event.preventDefault();
 });
+document.getElementById('cash-received').addEventListener('input', updateCashChange);
 const posParams = new URLSearchParams(location.search);
 if (posParams.get('error')) {
   const message = document.getElementById('pos-message');
   const error = posParams.get('error');
   message.textContent = error === 'stock'
     ? `${posParams.get('item') || 'An ingredient'} has insufficient stock. No sale was recorded.`
+    : error === 'cash' ? 'Cash received must cover the order total. No sale was recorded.'
     : error === 'server' ? 'The sale could not be saved. Please try again.'
       : 'Add at least one menu item before recording a sale.';
   message.hidden = false;

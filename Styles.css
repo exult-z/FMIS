@@ -36,6 +36,17 @@ main{max-width:980px;margin:auto;padding:14px 16px 40px}
 .chip small{display:block;font-weight:400;color:var(--mu)}
 .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--ln)}
 .row .g{flex:1}
+.qty-controls{display:inline-flex;align-items:center;gap:6px;flex:none}
+.cart-columns,.cart-row{display:grid;grid-template-columns:90px minmax(0,1fr) 90px;align-items:center;gap:10px}
+.cart-columns{padding:0 0 5px;color:var(--mu);font-size:12px;font-weight:700}
+.cart-columns span:last-child,.line-total{text-align:right}
+.cash-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end;margin-top:12px}
+.cash-details[hidden]{display:none}
+.cash-details .field{margin:0}
+.cash-details input{display:block;width:100%;margin-top:4px}
+.cash-change{padding:8px 0;font-weight:600}
+.cash-change b{display:block;color:var(--br);font-size:22px}
+.cash-details + .acts{margin-top:16px}
 .qty{background:var(--pri);color:var(--pi);border-radius:999px;padding:2px 10px;font-weight:700;font-size:13px}
 .x{border:1px solid var(--ln);background:none;border-radius:6px;cursor:pointer;width:28px;height:28px}
 .total{display:flex;justify-content:space-between;align-items:center;background:var(--bs);border:1.5px solid var(--ln);border-radius:10px;padding:10px 14px;margin:10px 0}
@@ -78,10 +89,19 @@ td{padding:9px 8px;border-bottom:1px solid var(--ln);vertical-align:middle}
 .system-notice strong{display:block}
 .system-notice ul{margin:6px 0;padding-left:22px}
 .system-notice a{font-weight:700;text-decoration:underline}
-.recipe-entry{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.recipe-entry .form{align-items:flex-end}
+.recipe-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px;margin-bottom:12px;padding:8px;border:1px solid var(--ln);border-radius:8px}
+.recipe-entry .recipe-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;min-width:0}
+.recipe-entry .recipe-name{grid-column:1/-1}
+.recipe-entry .recipe-name{overflow-wrap:anywhere}
+.recipe-entry .field{min-width:0;margin:0}
+.recipe-entry .field input{width:100%;min-width:0}
+.recipe-entry .sub{display:block;font-weight:400;margin:3px 0 0}
+.recipe-entry .recipe-edit .btn{grid-column:1}
+.recipe-entry .recipe-remove{align-self:end}
 .form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .form input[type=number]{width:90px}
+@media(max-width:700px){.recipe-entry{grid-template-columns:minmax(0,1fr)}.recipe-entry .recipe-remove{justify-self:end}}
+@container (max-width:360px){.recipe-entry .recipe-edit{grid-template-columns:minmax(0,1fr)}.recipe-entry .recipe-name{grid-column:1}}
 
 /* Sales chart */
 .hb{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:13px}
@@ -140,7 +160,7 @@ td input[type=number]{width:100px}
 .mgr summary::-webkit-details-marker{display:none}
 .mgr summary:focus-visible{outline:3px solid var(--br);outline-offset:2px}
 .mgr .del summary{color:var(--bad);border-color:var(--bad)}
-.panel{margin-top:8px;padding:10px;border:1.5px solid var(--ln);border-radius:10px;background:var(--bs);min-width:230px}
+.panel{margin-top:8px;padding:10px;border:1.5px solid var(--ln);border-radius:10px;background:var(--bs);min-width:230px;container-type:inline-size}
 .panel label{display:block;font-size:12px;font-weight:600;margin-bottom:8px}
 .panel input,.panel select{display:block;width:100%;margin-top:3px}
 .panel p{margin:0 0 8px}

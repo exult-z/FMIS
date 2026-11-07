@@ -12,7 +12,7 @@
 <p class="alert" id="recipe-message" role="status" hidden></p>
 
 <div class="card"><h2>Current menu</h2>
-<p class="sub">Edit names, prices, and ingredient amounts for each menu item. Recipe quantities use the ingredient's unit shown in Inventory and are consumed for each item sold.</p>
+<p class="sub">Set each product's ingredient amount and recipe unit independently. The amount you enter is deducted from inventory for each item sold.</p>
 <table>
 <thead><tr><th>Item</th><th>Price (₱)</th><th>Save</th><th>Ingredients per item</th><th></th></tr></thead>
 <tbody id="prices-body"></tbody>
@@ -42,16 +42,19 @@ const recipeParams = new URLSearchParams(location.search);
   for (const [id, it] of entries) {
     const recipes = (it.ingredients || []).map(ingredient => `
       <div class="recipe-entry">
-        <form class="form" method="post" action="/menu/recipe">
+        <form class="form recipe-edit" method="post" action="/menu/recipe">
           <input type="hidden" name="menuId" value="${escapeHtml(id)}">
           <input type="hidden" name="inventoryId" value="${escapeHtml(ingredient.inventoryId)}">
-          <label class="field">${escapeHtml(ingredient.ingredientName)}
-            <input type="number" name="quantity" value="${ingredient.quantity}" min="0.000001" step="any" required aria-label="Quantity of ${escapeHtml(ingredient.ingredientName)} per ${escapeHtml(it.name)}">
+          <strong class="recipe-name">${escapeHtml(ingredient.ingredientName)}</strong>
+          <label class="field">Amount per item
+            <input type="number" name="quantity" value="${ingredient.quantity}" min="0.000001" max="1000000" step="any" required aria-label="Amount of ${escapeHtml(ingredient.ingredientName)} per ${escapeHtml(it.name)}">
           </label>
-          <span>${escapeHtml(ingredient.unit)} per item</span>
+          <label class="field">Recipe unit
+            <input type="text" name="unit" value="${escapeHtml(ingredient.unit)}" maxlength="30" required aria-label="Recipe unit for ${escapeHtml(ingredient.ingredientName)}">
+          </label>
           <button type="submit" class="btn sm">Save</button>
         </form>
-        <form method="post" action="/menu/recipe/delete">
+        <form class="recipe-remove" method="post" action="/menu/recipe/delete">
           <input type="hidden" name="menuId" value="${escapeHtml(id)}">
           <input type="hidden" name="inventoryId" value="${escapeHtml(ingredient.inventoryId)}">
           <button type="submit" class="btn sm">Remove</button>
@@ -80,8 +83,11 @@ const recipeParams = new URLSearchParams(location.search);
                 <label class="field">Ingredient
                   <select name="inventoryId" required>${options}</select>
                 </label>
-                <label class="field">Quantity per item
-                  <input type="number" name="quantity" min="0.000001" step="any" required>
+                <label class="field">Amount per item
+                  <input type="number" name="quantity" min="0.000001" max="1000000" step="any" required>
+                </label>
+                <label class="field">Recipe unit
+                  <input type="text" name="unit" maxlength="30" placeholder="e.g. ml, g, scoop" required>
                 </label>
                 <button type="submit" class="btn sm pri">Add ingredient</button>
               </form>` : '<p class="sub">Add an inventory item before setting ingredients.</p>'}
@@ -106,7 +112,7 @@ const recipeParams = new URLSearchParams(location.search);
 if (recipeParams.get('error') === 'recipe' || recipeParams.get('recipe_saved')) {
   const message = document.getElementById('recipe-message');
   message.textContent = recipeParams.get('error')
-    ? 'Choose a menu item, ingredient, and positive quantity.'
+    ? 'Enter a valid amount and recipe unit.'
     : 'Recipe saved.';
   if (recipeParams.get('error')) message.classList.add('alert');
   else message.classList.add('okk');

@@ -63,6 +63,7 @@ db.exec(`
     menu_id TEXT NOT NULL REFERENCES menu(id) ON DELETE CASCADE,
     inventory_id TEXT NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
     quantity REAL NOT NULL CHECK (quantity > 0),
+    unit TEXT NOT NULL DEFAULT 'units',
     PRIMARY KEY (menu_id, inventory_id)
   );
 
@@ -136,9 +137,14 @@ const inventoryColumns = db.prepare('PRAGMA table_info(inventory)').all().map(co
 if (!inventoryColumns.includes('expires_on')) {
   db.exec('ALTER TABLE inventory ADD COLUMN expires_on TEXT');
 }
+const recipeColumns = db.prepare('PRAGMA table_info(recipes)').all().map(column => column.name);
+if (!recipeColumns.includes('unit')) {
+  db.exec("ALTER TABLE recipes ADD COLUMN unit TEXT NOT NULL DEFAULT 'units'");
+  db.exec('UPDATE recipes SET unit = (SELECT unit FROM inventory WHERE inventory.id = recipes.inventory_id)');
+}
 db.exec(`
-  INSERT OR IGNORE INTO recipes (menu_id, inventory_id, quantity)
-    SELECT menu.id, inventory.id, 1
+  INSERT OR IGNORE INTO recipes (menu_id, inventory_id, quantity, unit)
+    SELECT menu.id, inventory.id, 1, inventory.unit
     FROM menu, inventory
     WHERE menu.is_cup = 1 AND LOWER(inventory.name) = 'cups';
 `);
@@ -169,6 +175,49 @@ function stamp() {
   return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function normalizeUnit(unit) {
+  return String(unit || '').trim().toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
+}
+
+function unitGroup(unit) {
+  const u = normalizeUnit(unit);
+  if (['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres', 'cc', 'cm3'].includes(u)) return 'volume';
+  if (['l', 'liter', 'liters', 'litre', 'litres'].includes(u)) return 'volume';
+  if (['g', 'gram', 'grams'].includes(u)) return 'mass';
+  if (['kg', 'kilogram', 'kilograms', 'kilogramme', 'kilogrammes'].includes(u)) return 'mass';
+  if (['pcs', 'pc', 'piece', 'pieces', 'unit', 'units'].includes(u)) return 'count';
+  return null;
+}
+
+function unitToBase(value, unit) {
+  const u = normalizeUnit(unit);
+  if (['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres', 'cc', 'cm3'].includes(u)) return value / 1000;
+  if (['l', 'liter', 'liters', 'litre', 'litres'].includes(u)) return value;
+  if (['g', 'gram', 'grams'].includes(u)) return value;
+  if (['kg', 'kilogram', 'kilograms', 'kilogramme', 'kilogrammes'].includes(u)) return value * 1000;
+  return value;
+}
+
+function baseToUnit(value, unit) {
+  const u = normalizeUnit(unit);
+  if (['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres', 'cc', 'cm3'].includes(u)) return value * 1000;
+  if (['l', 'liter', 'liters', 'litre', 'litres'].includes(u)) return value;
+  if (['g', 'gram', 'grams'].includes(u)) return value;
+  if (['kg', 'kilogram', 'kilograms', 'kilogramme', 'kilogrammes'].includes(u)) return value / 1000;
+  return value;
+}
+
+function convertQuantityToUnit(value, fromUnit, toUnit) {
+  const from = normalizeUnit(fromUnit);
+  const to = normalizeUnit(toUnit);
+  if (!Number.isFinite(value) || value < 0) return value;
+  if (!from || !to || from === to) return value;
+  const fromGroup = unitGroup(from);
+  const toGroup = unitGroup(to);
+  if (fromGroup && toGroup && fromGroup !== toGroup) return NaN;
+  return baseToUnit(unitToBase(value, from), to);
+}
+
 function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : null;
@@ -196,6 +245,12 @@ if (!salesColumns.includes('recorded_by_username')) {
 }
 if (!salesColumns.includes('inventory_tracked')) {
   db.exec('ALTER TABLE sales ADD COLUMN inventory_tracked INTEGER NOT NULL DEFAULT 0');
+}
+if (!salesColumns.includes('cash_received')) {
+  db.exec('ALTER TABLE sales ADD COLUMN cash_received INTEGER');
+}
+if (!salesColumns.includes('change_given')) {
+  db.exec('ALTER TABLE sales ADD COLUMN change_given INTEGER NOT NULL DEFAULT 0');
 }
 if (!db.prepare("SELECT username FROM users WHERE role = 'owner'").get()) {
   const initialPassword = getSetting('ownerPin') || '1234';
@@ -380,7 +435,8 @@ function salesForUser(user, date = null) {
        END AS recordedBy`
     : '';
   return db.prepare(`
-    SELECT s.id, s.time, s.method, s.amount${recordedBy},
+    SELECT s.id, s.time, s.method, s.amount,
+           s.cash_received AS cashReceived, s.change_given AS changeGiven${recordedBy},
            GROUP_CONCAT(si.name || ' × ' || si.qty, ', ') AS "order"
     FROM sales s
     LEFT JOIN users u ON u.username = s.recorded_by_username
@@ -431,7 +487,7 @@ app.get('/api/db', (req, res) => {
   }
   const recipes = db.prepare(`
     SELECT recipes.menu_id AS menuId, recipes.inventory_id AS inventoryId,
-           recipes.quantity, inventory.name AS ingredientName, inventory.unit
+           recipes.quantity, recipes.unit, inventory.name AS ingredientName
     FROM recipes JOIN inventory ON inventory.id = recipes.inventory_id
     ORDER BY inventory.name
   `).all();
@@ -613,26 +669,40 @@ app.post('/record-sale', (req, res) => {
   const summary = items.map(item => `${item.name} × ${item.qty}`).join(', ');
   const amount = items.reduce((total, item) => total + item.price * item.qty, 0);
   const method  = (String(req.body.method || '').toLowerCase() === 'gcash') ? 'GCash' : 'Cash';
+  const cashReceived = method === 'Cash' ? Number(req.body.cashReceived) : null;
+  const changeGiven = method === 'Cash' ? cashReceived - amount : 0;
+  const redirectPath = req.user.role === 'barista' ? '/Barista_index.html' : '/Index.html';
 
   if (!items.length || items.some(item => item.qty > 10000) || !Number.isSafeInteger(amount) || amount <= 0) {
-    return res.redirect(req.user.role === 'barista' ? '/Barista_index.html?error=empty' : '/Index.html?error=empty');
+    return res.redirect(`${redirectPath}?error=empty`);
+  }
+  if (method === 'Cash' && (!Number.isSafeInteger(cashReceived) || cashReceived < amount)) {
+    return res.redirect(`${redirectPath}?error=cash`);
   }
 
   const today = todayKey();
   const timeStr = stamp();
-  const redirectPath = req.user.role === 'barista' ? '/Barista_index.html' : '/Index.html';
   let transactionOpen = false;
 
   try {
     db.exec('BEGIN');
     transactionOpen = true;
 
+    const inventoryUnits = new Map(
+      db.prepare('SELECT id, unit FROM inventory').all().map(row => [row.id, row.unit])
+    );
     const requiredStock = new Map();
-    const recipeQuery = db.prepare('SELECT inventory_id AS inventoryId, quantity FROM recipes WHERE menu_id = ?');
+    const recipeQuery = db.prepare('SELECT inventory_id AS inventoryId, quantity, unit FROM recipes WHERE menu_id = ?');
     for (const item of items) {
       for (const ingredient of recipeQuery.all(item.id)) {
-        const quantity = Math.round((requiredStock.get(ingredient.inventoryId) || 0) * 1e6
-          + ingredient.quantity * item.qty * 1e6) / 1e6;
+        const inventoryUnit = inventoryUnits.get(ingredient.inventoryId) || ingredient.unit;
+        const needed = convertQuantityToUnit(ingredient.quantity * item.qty, ingredient.unit, inventoryUnit);
+        if (!Number.isFinite(needed)) {
+          db.exec('ROLLBACK');
+          transactionOpen = false;
+          return res.redirect(`${redirectPath}?error=stock&item=${encodeURIComponent((inventoryUnits.get(ingredient.inventoryId) || ingredient.unit) || 'ingredient')}`);
+        }
+        const quantity = Math.round((requiredStock.get(ingredient.inventoryId) || 0) * 1e6 + needed * 1e6) / 1e6;
         requiredStock.set(ingredient.inventoryId, quantity);
       }
     }
@@ -646,20 +716,26 @@ app.post('/record-sale', (req, res) => {
     const consumption = [];
     for (const [inventoryId, quantity] of requiredStock) {
       const ingredient = getStock.get(inventoryId);
-      if (!ingredient || ingredient.stock < quantity) {
+      if (!ingredient) {
         db.exec('ROLLBACK');
         transactionOpen = false;
-        const itemName = ingredient ? ingredient.name : 'ingredient';
-        return res.redirect(`${redirectPath}?error=stock&item=${encodeURIComponent(itemName)}`);
+        return res.redirect(`${redirectPath}?error=stock&item=${encodeURIComponent('ingredient')}`);
       }
-      updateStock.run(quantity, inventoryId);
-      consumption.push({ inventoryId, ingredient, quantity });
+      const inventoryUnit = ingredient.unit;
+      const requiredQty = convertQuantityToUnit(quantity, inventoryUnit, inventoryUnit);
+      if (!Number.isFinite(requiredQty) || ingredient.stock < requiredQty) {
+        db.exec('ROLLBACK');
+        transactionOpen = false;
+        return res.redirect(`${redirectPath}?error=stock&item=${encodeURIComponent(ingredient.name)}`);
+      }
+      updateStock.run(requiredQty, inventoryId);
+      consumption.push({ inventoryId, ingredient, quantity: requiredQty, unit: inventoryUnit });
     }
 
     const info = db.prepare(`
-      INSERT INTO sales (time, date, method, amount, recorded_by, recorded_by_username, inventory_tracked)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
-    `).run(timeStr, today, method, amount, req.user.name, req.user.username);
+      INSERT INTO sales (time, date, method, amount, recorded_by, recorded_by_username, inventory_tracked, cash_received, change_given)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(timeStr, today, method, amount, req.user.name, req.user.username, cashReceived, changeGiven);
     const saleId = info.lastInsertRowid;
     for (const used of consumption) {
       recordConsumption.run(saleId, used.inventoryId, used.ingredient.name, used.ingredient.unit, used.quantity);
@@ -825,10 +901,12 @@ app.post('/menu/add', requireOwner, (req, res) => {
   const id = 'it-' + Date.now();
   db.prepare('INSERT INTO menu (id, name, price, is_cup) VALUES (?, ?, ?, ?)').run(id, name, price, isCup);
   if (isCup) {
-    const cups = db.prepare("SELECT id FROM inventory WHERE LOWER(name) = 'cups'").get();
+    const cups = db.prepare("SELECT id, unit FROM inventory WHERE LOWER(name) = 'cups'").get();
     if (cups) {
-      db.prepare('INSERT OR IGNORE INTO recipes (menu_id, inventory_id, quantity) VALUES (?, ?, 1)')
-        .run(id, cups.id);
+      db.prepare(`
+        INSERT OR IGNORE INTO recipes (menu_id, inventory_id, quantity, unit)
+        VALUES (?, ?, 1, ?)
+      `).run(id, cups.id, cups.unit);
     }
   }
   addLog(req.user.name, `Added menu item "${name}" at ₱ ${price}${isCup ? '' : ' (not a cup)'}`);
@@ -839,18 +917,22 @@ app.post('/menu/recipe', requireOwner, (req, res) => {
   const menuId = String(req.body.menuId || '');
   const inventoryId = String(req.body.inventoryId || '');
   const quantity = Number(req.body.quantity);
+  const unit = String(req.body.unit || '').trim();
   const menuItem = db.prepare('SELECT name FROM menu WHERE id = ?').get(menuId);
-  const ingredient = db.prepare('SELECT name, unit FROM inventory WHERE id = ?').get(inventoryId);
+  const ingredient = db.prepare('SELECT name FROM inventory WHERE id = ?').get(inventoryId);
 
-  if (!menuItem || !ingredient || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1000000) {
+  if (!menuItem || !ingredient || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1000000
+      || !unit || unit.length > 30) {
     return res.redirect(`/Prices.html?error=recipe&menuId=${encodeURIComponent(menuId)}`);
   }
 
   db.prepare(`
-    INSERT INTO recipes (menu_id, inventory_id, quantity) VALUES (?, ?, ?)
-    ON CONFLICT(menu_id, inventory_id) DO UPDATE SET quantity = excluded.quantity
-  `).run(menuId, inventoryId, quantity);
-  addLog(req.user.name, `Set ${quantity} ${ingredient.unit} of ${ingredient.name} per ${menuItem.name}`);
+    INSERT INTO recipes (menu_id, inventory_id, quantity, unit) VALUES (?, ?, ?, ?)
+    ON CONFLICT(menu_id, inventory_id) DO UPDATE SET
+      quantity = excluded.quantity,
+      unit = excluded.unit
+  `).run(menuId, inventoryId, quantity, unit);
+  addLog(req.user.name, `Set ${quantity} ${unit} of ${ingredient.name} per ${menuItem.name}`);
   res.redirect(`/Prices.html?recipe_saved=1&menuId=${encodeURIComponent(menuId)}`);
 });
 

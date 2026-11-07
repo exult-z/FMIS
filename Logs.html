@@ -12,7 +12,7 @@
 <div class="card"><h2>Audit log</h2>
 <p class="sub">Newest first. Every recorded action across the app.</p>
 <div class="scroll"><table>
-<thead><tr><th>When</th><th>User</th><th>Payment method</th><th>Action</th></tr></thead>
+<thead><tr><th>When</th><th>User</th><th>Payment method</th><th>Customer total</th><th>Action</th></tr></thead>
 <tbody id="logs-body"></tbody>
 </table></div></div>
 </main>
@@ -24,15 +24,16 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character =>
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const logs = db.logs || [];
   const tbody = document.getElementById('logs-body');
-  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="4" class="sub">No activity yet.</td></tr>';
+  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="5" class="sub">No activity yet.</td></tr>';
   for (const l of logs) {
-    const paymentMatch = /^(?:Recorded|Voided) sale\b/i.test(l.action)
-      ? l.action.match(/,\s*(Cash|GCash)(?=\)|;)/i)
-      : null;
-    const paymentMethod = paymentMatch ? paymentMatch[1] : '—';
-    const action = paymentMatch ? l.action.replace(paymentMatch[0], '') : l.action;
+    const saleMatch = l.action.match(/^(?:Recorded|Voided) sale\b.*?₱\s*([\d,]+),\s*(Cash|GCash)(?=\)|;)/i);
+    const paymentMethod = saleMatch ? saleMatch[2] : '—';
+    const customerTotal = saleMatch ? `₱ ${saleMatch[1]}` : '—';
+    const action = saleMatch
+      ? l.action.replace(/(?:\s*–\s*)?₱\s*[\d,]+,\s*(?:Cash|GCash)/i, '').replace(/\(\s*\);/, ';').replace(/\s+;/, ';')
+      : l.action;
     tbody.insertAdjacentHTML('beforeend',
-      `<tr><td>${escapeHtml(l.when)}</td><td>${escapeHtml(l.user)}</td><td>${paymentMethod}</td><td>${escapeHtml(action)}</td></tr>`);
+      `<tr><td>${escapeHtml(l.when)}</td><td>${escapeHtml(l.user)}</td><td>${paymentMethod}</td><td>${escapeHtml(customerTotal)}</td><td>${escapeHtml(action)}</td></tr>`);
   }
 })();
 </script>
