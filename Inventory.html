@@ -9,9 +9,10 @@
 <span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
 <nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html" class="on" aria-current="page">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu &amp; prices</a><a href="Report.html">Daily report</a><a href="Logs.html">Audit log</a><a href="Settings.html">Settings</a></nav>
 <main>
+<p class="alert" id="inventory-message" role="alert" hidden></p>
 <div class="card"><h2>Stock &amp; supplies</h2>
 <table>
-<thead><tr><th>Item</th><th>Stock</th><th>Status</th><th></th></tr></thead>
+<thead><tr><th>Item</th><th>Stock</th><th>Status</th><th>Expiration date</th><th></th></tr></thead>
 <tbody id="inventory-table-body"></tbody>
 </table></div>
 
@@ -33,21 +34,23 @@
 <option value="Other">Other (enter unit)</option>
 </select></label>
 <label class="field" id="custom-unit-field" hidden>Custom unit<input type="text" name="customUnit" id="custom-unit-input" placeholder="e.g. pumps" maxlength="30"></label>
-<label class="field">Starting stock<input type="number" name="stock" min="0" value="0"></label>
+<label class="field">Starting stock<input type="number" name="stock" min="0" step="any" value="0"></label>
+<label class="field">Expiration date (optional)<input type="date" name="expiresOn"></label>
 <button type="submit" class="btn pri">Add item</button>
 </form></div>
 
 <div class="card"><h2>Restock inventory</h2>
 <form class="form" method="post" action="/inventory/restock">
 <label class="field">Item<select name="id" id="restock-select"></select></label>
-<label class="field">Quantity to add<input type="number" name="qty" value="10" min="1" required></label>
+<label class="field">Quantity to add<input type="number" name="qty" value="10" min="0.000001" step="any" required></label>
+<label class="field">Update tracked expiry (optional)<input type="date" name="expiresOn"></label>
 <button type="submit" class="btn pri">Confirm restock</button>
 </form></div>
 
 <div class="card"><h2>Log wastage</h2>
 <form class="form" method="post" action="/inventory/waste">
 <label class="field">Item<select name="id" id="waste-select" required></select></label>
-<label class="field">Quantity<input type="number" name="qty" value="1" min="1"></label>
+<label class="field">Quantity<input type="number" name="qty" value="1" min="0.000001" step="any" required></label>
 <label class="field">Reason<select name="reason"><option>Spoiled</option><option>Spilled</option><option>Expired</option><option>Other</option></select></label>
 <button type="submit" class="btn pri">Log wastage</button>
 </form></div>
@@ -56,6 +59,9 @@
 const unitSelect = document.querySelector('select[name="unit"]');
 const customUnitField = document.getElementById('custom-unit-field');
 const customUnitInput = document.getElementById('custom-unit-input');
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
 const updateCustomUnitField = () => {
   const isCustomUnit = unitSelect.value === 'Other';
   customUnitField.hidden = !isCustomUnit;
@@ -68,26 +74,36 @@ updateCustomUnitField();
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const inv = db.inventory || [];
   const tbody = document.getElementById('inventory-table-body');
-  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="4" class="sub">No inventory records.</td></tr>';
+  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="5" class="sub">No inventory records.</td></tr>';
   for (const it of inv) {
     const isLow = it.stock < 15;
     tbody.insertAdjacentHTML('beforeend', `
-      <tr><td><b>${it.name}</b></td><td>${it.stock} ${it.unit||''}</td>
+      <tr><td><b>${escapeHtml(it.name)}</b></td><td>${it.stock} ${escapeHtml(it.unit || '')}</td>
       <td><span class="pill ${isLow ? 'low' : 'ok'}">${isLow ? 'Low' : 'OK'}</span></td>
-      <td><form method="post" action="/inventory/delete" onsubmit="return confirm('Remove ${it.name}?')">
-      <input type="hidden" name="id" value="${it.id}"><button class="btn sm" type="submit">Remove</button></form></td></tr>`);
+      <td><form class="form" method="post" action="/inventory/expiry">
+      <input type="hidden" name="id" value="${escapeHtml(it.id)}">
+      <input type="date" name="expiresOn" value="${escapeHtml(it.expiresOn || '')}" aria-label="Expiration date for ${escapeHtml(it.name)}">
+      <button class="btn sm" type="submit">Save date</button></form></td>
+      <td><form method="post" action="/inventory/delete">
+      <input type="hidden" name="id" value="${escapeHtml(it.id)}"><button class="btn sm" type="submit">Remove</button></form></td></tr>`);
   }
   const opts = inv.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
   document.getElementById('restock-select').innerHTML = opts;
   document.getElementById('waste-select').innerHTML = opts;
 })();
-document.querySelector('form[action="/inventory/waste"]').addEventListener('submit', event => {
-  const form = event.currentTarget;
-  const item = form.querySelector('select[name="id"]').selectedOptions[0];
-  const qty = form.querySelector('input[name="qty"]').value;
-  const reason = form.querySelector('select[name="reason"]').value;
-  if (!confirm(`Confirm wastage: ${qty} ${item.textContent} (${reason})?`)) event.preventDefault();
-});
+const inventoryMessages = {
+  expiry: 'Enter a valid expiration date.',
+  stock: 'Enter a valid stock quantity.',
+  name: 'Enter an item name.',
+  unit: 'Choose or enter a unit.',
+  dupe: 'An inventory item with that name already exists.'
+};
+const inventoryError = new URLSearchParams(location.search).get('error');
+if (inventoryMessages[inventoryError]) {
+  const message = document.getElementById('inventory-message');
+  message.textContent = inventoryMessages[inventoryError];
+  message.hidden = false;
+}
 </script>
 <script src="user.js"></script>
 </body></html>

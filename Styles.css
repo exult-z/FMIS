@@ -74,6 +74,12 @@ th{text-align:left;font-size:12px;color:var(--mu);padding:8px;border-bottom:1.5p
 td{padding:9px 8px;border-bottom:1px solid var(--ln);vertical-align:middle}
 .alert{background:var(--bads);border:1.5px solid var(--bad);color:var(--bad);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:600}
 .alert.okk{background:var(--bs);border-color:var(--ln);color:var(--ink)}
+.system-notice{max-width:980px;margin:14px auto 0;padding:12px 16px;border:1.5px solid var(--bad);border-radius:10px;background:var(--bads);color:var(--bad)}
+.system-notice strong{display:block}
+.system-notice ul{margin:6px 0;padding-left:22px}
+.system-notice a{font-weight:700;text-decoration:underline}
+.recipe-entry{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.recipe-entry .form{align-items:flex-end}
 .form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .form input[type=number]{width:90px}
 

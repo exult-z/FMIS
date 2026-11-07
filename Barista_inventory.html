@@ -20,7 +20,7 @@
 <p class="sub">Spoiled or spilled stock is removed from inventory.</p>
 <form class="form" method="post" action="/inventory/waste">
 <label class="field">Item<select name="id" id="b-waste-item" required></select></label>
-<label class="field">Quantity<input type="number" name="qty" min="1" value="1" required></label>
+<label class="field">Quantity<input type="number" name="qty" min="0.000001" step="any" value="1" required></label>
 <label class="field">Reason<select name="reason">
 <option>Spoiled</option><option>Spilled</option><option>Expired</option><option>Other</option>
 </select></label>
@@ -47,13 +47,6 @@
   const sel = document.getElementById('b-waste-item');
   sel.innerHTML = inv.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
 })();
-document.querySelector('form[action="/inventory/waste"]').addEventListener('submit', event => {
-  const form = event.currentTarget;
-  const item = form.querySelector('select[name="id"]').selectedOptions[0];
-  const qty = form.querySelector('input[name="qty"]').value;
-  const reason = form.querySelector('select[name="reason"]').value;
-  if (!confirm(`Confirm wastage: ${qty} ${item.textContent} (${reason})?`)) event.preventDefault();
-});
 </script>
 <script src="user.js"></script>
 </body></html>

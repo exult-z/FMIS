@@ -55,7 +55,7 @@
   if (r.status === 'Verified') {
     area.innerHTML = `
       <p class="sub">✔ Verified &amp; signed by <b>${r.signedBy}</b> on ${r.signedAt}.</p>
-      <form method="post" action="/unverify-report" onsubmit="return confirm('Reset verification? This reopens the report.')">
+      <form method="post" action="/unverify-report">
         <button type="submit" class="btn">Reset verification</button>
       </form>`;
   } else {

@@ -10,6 +10,7 @@
 <nav><a href="Index.html" class="on" aria-current="page">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Prices.html">Menu &amp; prices</a><a href="Report.html">Daily report</a><a href="Logs.html">Audit log</a><a href="Settings.html">Settings</a></nav>
 <main>
 <form method="post" action="/record-sale" id="pos-form">
+<p class="alert" id="pos-message" role="alert" hidden></p>
 <div class="card"><h2>New order</h2><p class="sub">Tap drinks to add to cart.</p>
 <div class="menu" id="pos-menu"></div></div>
 
@@ -17,6 +18,7 @@
 <div id="cart-items"></div>
 <div class="total"><b>Total</b><span class="num" id="cart-total">₱ 0</span></div>
 <input type="hidden" name="orderSummary" id="hidden-items-input">
+<input type="hidden" name="orderData" id="hidden-order-data">
 <input type="hidden" name="amount" id="hidden-amount-input" value="0">
 <input type="hidden" name="method" id="hidden-method-input" value="Cash">
 <div class="acts">
@@ -28,6 +30,9 @@
 </main>
 <script>
 let cart = {};
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
 function setPayment(method) {
   document.getElementById('hidden-method-input').value = method;
   document.getElementById('btn-cash').classList.toggle('on', method === 'Cash');
@@ -37,20 +42,24 @@ function renderCart() {
   const container = document.getElementById('cart-items');
   container.innerHTML = '';
   let total = 0; const summary = [];
-  for (const name in cart) {
-    const item = cart[name]; const sub = item.price * item.qty;
-    total += sub; summary.push(name + ' × ' + item.qty);
+  for (const id in cart) {
+    const item = cart[id]; const sub = item.price * item.qty;
+    total += sub; summary.push(item.name + ' × ' + item.qty);
     container.insertAdjacentHTML('beforeend',
-      `<div class="row"><span class="qty">× ${item.qty}</span><span class="g">${name}</span><b>₱ ${sub}</b><button type="button" class="x" onclick="removeItem('${name.replace(/'/g,"\\'")}')">−</button></div>`);
+      `<div class="row"><span class="qty">× ${item.qty}</span><span class="g">${escapeHtml(item.name)}</span><b>₱ ${sub}</b><button type="button" class="x" data-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(item.name)}">−</button></div>`);
   }
   if (!Object.keys(cart).length) container.innerHTML = '<p class="sub">No items in current order. Tap a drink above.</p>';
+  container.querySelectorAll('.x').forEach(button => button.addEventListener('click', () => removeItem(button.dataset.id)));
   document.getElementById('cart-total').textContent = '₱ ' + total;
   document.getElementById('hidden-items-input').value = summary.join(', ');
   document.getElementById('hidden-amount-input').value = total;
+  document.getElementById('hidden-order-data').value = JSON.stringify(
+    Object.entries(cart).map(([id, item]) => ({ id, qty: item.qty }))
+  );
 }
-function removeItem(name) {
-  if (!cart[name]) return;
-  if (--cart[name].qty <= 0) delete cart[name];
+function removeItem(id) {
+  if (!cart[id]) return;
+  if (--cart[id].qty <= 0) delete cart[id];
   renderCart();
 }
 (async () => {
@@ -58,20 +67,28 @@ function removeItem(name) {
   const menu = db.menu || {};
   const wrap = document.getElementById('pos-menu');
   wrap.innerHTML = Object.entries(menu).map(([id, it]) =>
-    `<button type="button" class="chip" data-name="${it.name}" data-price="${it.price}">
-       <span>${it.name}<small>₱ ${it.price}</small></span></button>`).join('');
+    `<button type="button" class="chip" data-id="${escapeHtml(id)}" data-name="${escapeHtml(it.name)}" data-price="${it.price}">
+       <span>${escapeHtml(it.name)}<small>₱ ${it.price}</small></span></button>`).join('');
   wrap.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
-    const name = b.dataset.name, price = +b.dataset.price;
-    if (!cart[name]) cart[name] = { price, qty: 0 };
-    cart[name].qty++; renderCart();
+    const id = b.dataset.id, name = b.dataset.name, price = +b.dataset.price;
+    if (!cart[id]) cart[id] = { name, price, qty: 0 };
+    cart[id].qty++; renderCart();
   }));
   renderCart();
 })();
 document.getElementById('pos-form').addEventListener('submit', event => {
-  const summary = document.getElementById('hidden-items-input').value;
-  const amount = document.getElementById('hidden-amount-input').value;
-  if (!summary || !confirm(`Confirm recording this sale?\n${summary}\nTotal: ₱ ${amount}`)) event.preventDefault();
+  if (!document.getElementById('hidden-order-data').value) event.preventDefault();
 });
+const posParams = new URLSearchParams(location.search);
+if (posParams.get('error')) {
+  const message = document.getElementById('pos-message');
+  const error = posParams.get('error');
+  message.textContent = error === 'stock'
+    ? `${posParams.get('item') || 'An ingredient'} has insufficient stock. No sale was recorded.`
+    : error === 'server' ? 'The sale could not be saved. Please try again.'
+      : 'Add at least one menu item before recording a sale.';
+  message.hidden = false;
+}
 </script>
 <script src="user.js"></script>
 </body></html>

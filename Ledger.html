@@ -50,7 +50,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character =>
       <td><span class="pill ${isCashUI ? 'cash' : 'gcash'}">${s.method}</span></td>
       <td><b>₱ ${s.amount}</b></td>
       <td>${escapeHtml(s.recordedBy)}</td>
-      <td><form method="post" action="/void-sale" onsubmit="return confirm('Void sale #${s.id}?')">
+      <td><form method="post" action="/void-sale">
       <input type="hidden" name="saleId" value="${s.id}">
       <button type="submit" class="btn sm">Void</button></form></td></tr>`);
   }
