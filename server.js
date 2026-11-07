@@ -843,7 +843,7 @@ app.post('/menu/recipe', requireOwner, (req, res) => {
   const ingredient = db.prepare('SELECT name, unit FROM inventory WHERE id = ?').get(inventoryId);
 
   if (!menuItem || !ingredient || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1000000) {
-    return res.redirect('/Prices.html?error=recipe');
+    return res.redirect(`/Prices.html?error=recipe&menuId=${encodeURIComponent(menuId)}`);
   }
 
   db.prepare(`
@@ -851,7 +851,7 @@ app.post('/menu/recipe', requireOwner, (req, res) => {
     ON CONFLICT(menu_id, inventory_id) DO UPDATE SET quantity = excluded.quantity
   `).run(menuId, inventoryId, quantity);
   addLog(req.user.name, `Set ${quantity} ${ingredient.unit} of ${ingredient.name} per ${menuItem.name}`);
-  res.redirect('/Prices.html?recipe_saved=1');
+  res.redirect(`/Prices.html?recipe_saved=1&menuId=${encodeURIComponent(menuId)}`);
 });
 
 app.post('/menu/recipe/delete', requireOwner, (req, res) => {
@@ -868,7 +868,7 @@ app.post('/menu/recipe/delete', requireOwner, (req, res) => {
     db.prepare('DELETE FROM recipes WHERE menu_id = ? AND inventory_id = ?').run(menuId, inventoryId);
     addLog(req.user.name, `Removed ${recipe.ingredientName} from ${recipe.menuName} recipe`);
   }
-  res.redirect('/Prices.html?recipe_saved=1');
+  res.redirect(`/Prices.html?recipe_saved=1&menuId=${encodeURIComponent(menuId)}`);
 });
 
 app.post('/menu/delete', requireOwner, (req, res) => {

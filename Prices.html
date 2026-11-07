@@ -12,7 +12,7 @@
 <p class="alert" id="recipe-message" role="status" hidden></p>
 
 <div class="card"><h2>Current menu</h2>
-<p class="sub">Edit names, prices, and ingredient amounts. Ingredient quantities use the unit shown in Inventory and are consumed for each item sold.</p>
+<p class="sub">Edit names, prices, and ingredient amounts for each menu item. Recipe quantities use the ingredient's unit shown in Inventory and are consumed for each item sold.</p>
 <table>
 <thead><tr><th>Item</th><th>Price (₱)</th><th>Save</th><th>Ingredients per item</th><th></th></tr></thead>
 <tbody id="prices-body"></tbody>
@@ -30,6 +30,7 @@
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
+const recipeParams = new URLSearchParams(location.search);
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const menu = db.menu || {};
@@ -71,7 +72,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character =>
         </td>
         <td><button type="submit" class="btn sm pri" form="f-${id}">Save</button></td>
         <td>
-          <details>
+          <details data-menu-id="${escapeHtml(id)}">
             <summary>${(it.ingredients || []).length} ingredient(s)</summary>
             <div class="panel">${recipes}
               ${inventory.length ? `<form class="form" method="post" action="/menu/recipe">
@@ -95,8 +96,13 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character =>
         </td>
       </tr>`);
   }
+  const activeMenuId = recipeParams.get('menuId');
+  if (activeMenuId) {
+    const activeRecipePanel = Array.from(tbody.querySelectorAll('details'))
+      .find(details => details.dataset.menuId === activeMenuId);
+    if (activeRecipePanel) activeRecipePanel.open = true;
+  }
 })();
-const recipeParams = new URLSearchParams(location.search);
 if (recipeParams.get('error') === 'recipe' || recipeParams.get('recipe_saved')) {
   const message = document.getElementById('recipe-message');
   message.textContent = recipeParams.get('error')

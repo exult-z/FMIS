@@ -9,7 +9,7 @@
 
 ## Inventory recipes and expiration notices
 
-- On **Menu & prices**, expand an item's ingredient list to add or edit the amount of each inventory ingredient used per item sold. Amounts use the ingredient's inventory unit. Cup-based menu items start with one cup per item.
+- On **Menu & prices**, expand an item's ingredient list to add or edit the amount of each inventory ingredient used per item sold. Amounts are customized per menu item and use the ingredient's inventory unit; adding or saving an ingredient keeps that item's recipe list expanded. Cup-based menu items start with one cup per item.
 - Owners can edit an inventory item's unit from **Inventory**. Changing the unit updates its label but does not convert stock or recipe quantities.
 - Orders are not recorded if the configured recipe requires more stock than is available.
 - Owners can set or edit an inventory item's expiration date on **Inventory**. The system shows an in-app notice on owner pages when stocked items are expired or will expire within seven days.
