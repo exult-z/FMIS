@@ -118,8 +118,8 @@ function seedIfEmpty() {
 
   const addInv = db.prepare('INSERT INTO inventory (id, name, unit, stock) VALUES (?, ?, ?, ?)');
   addInv.run('fresh-milk',    'Fresh milk',    'L',   32);
-  addInv.run('ube-powder',    'Ube powder',    'kg',  14);
-  addInv.run('matcha-powder', 'Matcha powder', 'kg',  42);
+  addInv.run('ube-powder',    'Ube powder',    'g',  14);
+  addInv.run('matcha-powder', 'Matcha powder', 'g',  42);
   addInv.run('cups',          'Cups',          'pcs', 1200);
 
   const upsert = db.prepare('INSERT INTO report_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
