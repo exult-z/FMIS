@@ -56,11 +56,13 @@
 const unitSelect = document.querySelector('select[name="unit"]');
 const customUnitField = document.getElementById('custom-unit-field');
 const customUnitInput = document.getElementById('custom-unit-input');
-unitSelect.addEventListener('change', () => {
+const updateCustomUnitField = () => {
   const isCustomUnit = unitSelect.value === 'Other';
   customUnitField.hidden = !isCustomUnit;
   customUnitInput.required = isCustomUnit;
-});
+};
+unitSelect.addEventListener('change', updateCustomUnitField);
+updateCustomUnitField();
 
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();

@@ -102,6 +102,7 @@ header .out{border:1.5px solid #4a433e;border-radius:8px;padding:6px 12px;font-s
 /* Login and forms */
 .login{max-width:400px;margin:30px auto}
 .field{display:block;font-weight:600;font-size:13px;margin-bottom:12px}
+.field[hidden]{display:none}
 .field input[type=text],.field input[type=password],.field textarea{display:block;width:100%;margin-top:4px}
 .field input[type=checkbox]{margin-right:6px}
 textarea{background:var(--sf);border:1.5px solid var(--ln);border-radius:8px;padding:7px 10px;color:var(--ink);font:inherit}
