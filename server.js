@@ -186,10 +186,12 @@ const salesColumns = db.prepare('PRAGMA table_info(sales)').all().map(column => 
 if (!salesColumns.includes('recorded_by')) {
   db.exec("ALTER TABLE sales ADD COLUMN recorded_by TEXT NOT NULL DEFAULT 'Owner'");
 }
+if (!salesColumns.includes('recorded_by_username')) {
+  db.exec('ALTER TABLE sales ADD COLUMN recorded_by_username TEXT');
+}
 if (!salesColumns.includes('inventory_tracked')) {
   db.exec('ALTER TABLE sales ADD COLUMN inventory_tracked INTEGER NOT NULL DEFAULT 0');
 }
-
 if (!db.prepare("SELECT username FROM users WHERE role = 'owner'").get()) {
   const initialPassword = getSetting('ownerPin') || '1234';
   const credentials = hashPassword(initialPassword);
@@ -197,6 +199,21 @@ if (!db.prepare("SELECT username FROM users WHERE role = 'owner'").get()) {
     .run('owner', 'Maria Santos', 'owner', credentials.salt, credentials.hash);
 }
 db.prepare("DELETE FROM settings WHERE key IN ('ownerPin', 'ownerName')").run();
+db.exec(`
+  UPDATE sales
+  SET recorded_by_username = (
+    SELECT username FROM users
+    WHERE users.name = sales.recorded_by
+    GROUP BY users.name
+    HAVING COUNT(*) = 1
+  )
+  WHERE recorded_by_username IS NULL
+    AND recorded_by IN (
+      SELECT name FROM users GROUP BY name HAVING COUNT(*) = 1
+    );
+  CREATE INDEX IF NOT EXISTS idx_sales_recorded_by_username
+    ON sales(recorded_by_username);
+`);
 
 function sessionUser(req) {
   const cookie = (req.headers.cookie || '').split(';').map(part => part.trim())
@@ -327,7 +344,29 @@ function parseOrder(orderData, summary) {
   return parsed;
 }
 
-function historyObject() {
+function salesForUser(user, date = null) {
+  const owner = user.role === 'owner';
+  const recordedBy = owner
+    ? `, CASE
+         WHEN u.username IS NULL THEN s.recorded_by
+         WHEN u.role = 'owner' THEN u.name || ' · Owner'
+         ELSE u.name || ' · Barista'
+       END AS recordedBy`
+    : '';
+  return db.prepare(`
+    SELECT s.id, s.time, s.method, s.amount${recordedBy},
+           GROUP_CONCAT(si.name || ' × ' || si.qty, ', ') AS "order"
+    FROM sales s
+    LEFT JOIN users u ON u.username = s.recorded_by_username
+    LEFT JOIN sale_items si ON si.sale_id = s.id
+    WHERE (? = 1 OR s.recorded_by_username = ?)
+      AND (? IS NULL OR s.date = ?)
+    GROUP BY s.id
+    ORDER BY s.id DESC
+  `).all(owner ? 1 : 0, user.username, date, date);
+}
+
+function historyObject(user) {
   const days = db.prepare(`
     SELECT date,
            SUM(amount) AS total,
@@ -350,17 +389,9 @@ function historyObject() {
     `).all(d.date);
     for (const c of cupRows) cups[c.name] = c.qty;
 
-  const sales = db.prepare(`
-      SELECT s.id, s.time, s.method, s.amount, s.recorded_by AS recordedBy,
-             GROUP_CONCAT(si.name || ' × ' || si.qty, ', ') AS "order"
-      FROM sales s
-      LEFT JOIN sale_items si ON si.sale_id = s.id
-      WHERE s.date = ?
-      GROUP BY s.id
-      ORDER BY s.id DESC
-    `).all(d.date);
-
-    out[d.date] = { sales, cups, total: d.total, cash: d.cash, gcash: d.gcash };
+    const day = { cups, total: d.total, cash: d.cash, gcash: d.gcash };
+    if (user.role === 'owner') day.sales = salesForUser(user, d.date);
+    out[d.date] = day;
   }
   return out;
 }
@@ -387,16 +418,11 @@ app.get('/api/db', (req, res) => {
     .filter(item => item.stock > 0 && item.expiresOn && isValidDateKey(item.expiresOn) && item.expiresOn <= dateKeyOffset(7))
     .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn));
 
-  const sales = db.prepare(`
-    SELECT s.id, s.time, s.method, s.amount, s.recorded_by AS recordedBy,
-           GROUP_CONCAT(si.name || ' × ' || si.qty, ', ') AS "order"
-    FROM sales s
-    LEFT JOIN sale_items si ON si.sale_id = s.id
-    GROUP BY s.id
-    ORDER BY s.id DESC
-  `).all();
+  const sales = salesForUser(req.user);
 
-  const logs = db.prepare('SELECT when_ AS "when", user, action FROM logs ORDER BY id DESC').all();
+  const logs = req.user.role === 'owner'
+    ? db.prepare('SELECT when_ AS "when", user, action FROM logs ORDER BY id DESC').all()
+    : [];
 
   const rep = getReport();
 
@@ -408,7 +434,7 @@ app.get('/api/db', (req, res) => {
     reportSignedBy: rep.signedBy,
     reportSignedAt: rep.signedAt,
     reportDate: rep.date,
-    history: historyObject()
+    history: historyObject(req.user)
   });
 });
 
@@ -473,7 +499,9 @@ app.get('/api/report', (req, res) => {
   const last30 = (last30Row.cups || 0) + todayCups;
 
   const rep = getReport();
-  const logs = db.prepare('SELECT when_ AS "when", user, action FROM logs ORDER BY id DESC LIMIT 50').all();
+  const logs = req.user.role === 'owner'
+    ? db.prepare('SELECT when_ AS "when", user, action FROM logs ORDER BY id DESC LIMIT 50').all()
+    : [];
 
   res.json({
     date: today,
@@ -603,9 +631,9 @@ app.post('/record-sale', (req, res) => {
     }
 
     const info = db.prepare(`
-      INSERT INTO sales (time, date, method, amount, recorded_by, inventory_tracked)
-      VALUES (?, ?, ?, ?, ?, 1)
-    `).run(timeStr, today, method, amount, req.user.name);
+      INSERT INTO sales (time, date, method, amount, recorded_by, recorded_by_username, inventory_tracked)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `).run(timeStr, today, method, amount, req.user.name, req.user.username);
     const saleId = info.lastInsertRowid;
     for (const used of consumption) {
       recordConsumption.run(saleId, used.inventoryId, used.ingredient.name, used.ingredient.unit, used.quantity);

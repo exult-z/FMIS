@@ -12,7 +12,7 @@
 <div class="card"><h2>Sales today</h2>
 <p class="sub" id="b-ledger-sub">Loading…</p>
 <div class="scroll"><table>
-<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th><th>Recorded by</th></tr></thead>
+<thead><tr><th>Time</th><th>Order</th><th>Method</th><th>Amount</th></tr></thead>
 <tbody id="b-ledger-body"></tbody>
 </table></div>
 <div class="grid3">
@@ -23,9 +23,6 @@
 </div>
 </main>
 <script>
-const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-})[character]);
 async function loadLedger() {
   const db = await (await fetch('/api/db')).json();
   const tbody = document.getElementById('b-ledger-body');
@@ -40,10 +37,9 @@ async function loadLedger() {
         <td>${s.order}</td>
         <td><span class="pill ${isCash ? 'cash' : 'gcash'}">${s.method}</span></td>
         <td><b>₱ ${s.amount}</b></td>
-        <td>${escapeHtml(s.recordedBy)}</td>
       </tr>`);
   });
-  if (!db.sales.length) tbody.innerHTML = '<tr><td colspan="5" class="sub">No sales yet today.</td></tr>';
+  if (!db.sales.length) tbody.innerHTML = '<tr><td colspan="4" class="sub">No sales yet today.</td></tr>';
   const total = cash + gcash;
   document.getElementById('b-cash').textContent = `₱ ${cash}`;
   document.getElementById('b-gcash').textContent = `₱ ${gcash}`;
