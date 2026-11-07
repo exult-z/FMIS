@@ -11,8 +11,9 @@
 <main>
 <p class="alert" id="inventory-message" role="alert" hidden></p>
 <div class="card"><h2>Stock &amp; supplies</h2>
+<p class="sub">You can edit an item's unit here. Changing the unit does not convert stock or recipe quantities.</p>
 <table>
-<thead><tr><th>Item</th><th>Stock</th><th>Status</th><th>Expiration date</th><th></th></tr></thead>
+<thead><tr><th>Item</th><th>Stock</th><th>Unit</th><th>Status</th><th>Expiration date</th><th></th></tr></thead>
 <tbody id="inventory-table-body"></tbody>
 </table></div>
 
@@ -74,11 +75,15 @@ updateCustomUnitField();
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const inv = db.inventory || [];
   const tbody = document.getElementById('inventory-table-body');
-  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="5" class="sub">No inventory records.</td></tr>';
+  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="6" class="sub">No inventory records.</td></tr>';
   for (const it of inv) {
     const isLow = it.stock < 15;
     tbody.insertAdjacentHTML('beforeend', `
-      <tr><td><b>${escapeHtml(it.name)}</b></td><td>${it.stock} ${escapeHtml(it.unit || '')}</td>
+      <tr><td><b>${escapeHtml(it.name)}</b></td><td>${it.stock}</td>
+      <td><form class="form" method="post" action="/inventory/unit">
+      <input type="hidden" name="id" value="${escapeHtml(it.id)}">
+      <input type="text" name="unit" value="${escapeHtml(it.unit || '')}" maxlength="30" required aria-label="Unit for ${escapeHtml(it.name)}">
+      <button class="btn sm" type="submit">Save unit</button></form></td>
       <td><span class="pill ${isLow ? 'low' : 'ok'}">${isLow ? 'Low' : 'OK'}</span></td>
       <td><form class="form" method="post" action="/inventory/expiry">
       <input type="hidden" name="id" value="${escapeHtml(it.id)}">

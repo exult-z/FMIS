@@ -684,6 +684,19 @@ app.post('/inventory/add', requireOwner, (req, res) => {
   res.redirect('/Inventory.html');
 });
 
+app.post('/inventory/unit', requireOwner, (req, res) => {
+  const id = String(req.body.id || '');
+  const unit = String(req.body.unit || '').trim();
+  if (!unit || unit.length > 30) return res.redirect('/Inventory.html?error=unit');
+
+  const item = db.prepare('SELECT name, unit AS previousUnit FROM inventory WHERE id = ?').get(id);
+  if (item) {
+    db.prepare('UPDATE inventory SET unit = ? WHERE id = ?').run(unit, id);
+    addLog(req.user.name, `Updated unit for "${item.name}" from ${item.previousUnit} to ${unit}`);
+  }
+  res.redirect('/Inventory.html');
+});
+
 app.post('/inventory/delete', requireOwner, (req, res) => {
   const id = req.body.id;
   const item = db.prepare('SELECT name FROM inventory WHERE id = ?').get(id);
