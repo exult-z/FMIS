@@ -37,14 +37,15 @@
     tbody.insertAdjacentHTML('beforeend', `
       <tr>
         <td>
-          <form method="post" action="/menu/update" id="f-${id}" style="display:contents">
+          <form method="post" action="/menu/update" id="f-${id}">
             <input type="hidden" name="id" value="${id}">
             <input type="text" name="name" value="${it.name}" required>
+          </form>
         </td>
         <td>
-            <input type="number" name="price" value="${it.price}" min="1" required>
+            <input type="number" name="price" value="${it.price}" min="1" required form="f-${id}">
         </td>
-        <td><button type="submit" class="btn sm pri">Save</button></form></td>
+        <td><button type="submit" class="btn sm pri" form="f-${id}">Save</button></td>
         <td>
           <form method="post" action="/menu/delete" onsubmit="return confirm('Remove ${it.name} from menu?')">
             <input type="hidden" name="id" value="${id}">
