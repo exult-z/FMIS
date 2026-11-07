@@ -31,7 +31,7 @@
 <div class="card"><h2>Today's activity (audit trail)</h2>
 <p class="sub">Every change, addition, replacement, order, and void recorded today.</p>
 <div class="scroll"><table>
-<thead><tr><th>When</th><th>User</th><th>Action</th></tr></thead>
+<thead><tr><th>When</th><th>User</th><th>Payment method</th><th>Action</th></tr></thead>
 <tbody id="rep-logs"></tbody>
 </table></div>
 </div>
@@ -69,10 +69,15 @@
   // Audit trail
   const tbody = document.getElementById('rep-logs');
   const logs = r.logs || [];
-  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="3" class="sub">No activity recorded yet.</td></tr>';
+  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="4" class="sub">No activity recorded yet.</td></tr>';
   for (const l of logs) {
+    const paymentMatch = /^(?:Recorded|Voided) sale\b/i.test(l.action)
+      ? l.action.match(/,\s*(Cash|GCash)(?=\)|;)/i)
+      : null;
+    const paymentMethod = paymentMatch ? paymentMatch[1] : '—';
+    const action = paymentMatch ? l.action.replace(paymentMatch[0], '') : l.action;
     tbody.insertAdjacentHTML('beforeend',
-      `<tr><td>${l.when}</td><td>${l.user}</td><td>${l.action}</td></tr>`);
+      `<tr><td>${l.when}</td><td>${l.user}</td><td>${paymentMethod}</td><td>${action}</td></tr>`);
   }
 })();
 </script>
