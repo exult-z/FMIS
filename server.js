@@ -2,6 +2,7 @@ const express = require('express');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const crypto = require('crypto');
+process.env.TZ = process.env.TZ || 'Asia/Manila';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -14,6 +15,7 @@ const DB_FILE = process.env.FMIS_DB_FILE || path.join(__dirname, 'cupsion.db');
 const db = new DatabaseSync(DB_FILE);
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_BARISTA_PASSWORD = 'barista123';
+const COOKIE_FLAGS = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
 // ---------- Schema (runs once) ----------
 db.exec(`
@@ -244,7 +246,7 @@ function startSession(res, username) {
   const expiresAt = Date.now() + SESSION_TTL;
   db.prepare('INSERT INTO sessions (token_hash, username, expires_at) VALUES (?, ?, ?)')
     .run(tokenHash, username, expiresAt);
-  res.setHeader('Set-Cookie', `fmis_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`);
+  res.setHeader('Set-Cookie', `fmis_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}${COOKIE_FLAGS}`);
 }
 
 function currentSessionHash(req) {
@@ -290,7 +292,7 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => res.redirect(req.user ? (req.user.role === 'barista' ? '/Barista_index.html' : '/Index.html') : '/Login.html'));
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public')));
 
 function getReport() {
   const rows = db.prepare('SELECT key, value FROM report_state').all();
@@ -540,7 +542,7 @@ app.post('/login', (req, res) => {
 app.get('/logout', (req, res) => {
   const tokenHash = currentSessionHash(req);
   if (tokenHash) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
-  res.setHeader('Set-Cookie', 'fmis_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  res.setHeader('Set-Cookie', `fmis_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${COOKIE_FLAGS}`);
   res.redirect('/Login.html');
 });
 
