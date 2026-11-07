@@ -392,9 +392,11 @@ app.post('/void-sale', (req, res) => {
 // ---------- Inventory ----------
 app.post('/inventory/add', (req, res) => {
   const name = (req.body.name || '').trim();
-  const unit = (req.body.unit || 'units').trim();
+  const unitChoice = (req.body.unit || 'units').trim();
+  const unit = unitChoice === 'Other' ? (req.body.customUnit || '').trim() : unitChoice;
   const stock = Math.max(0, parseInt(req.body.stock, 10) || 0);
   if (!name) return res.redirect('/Inventory.html?error=name');
+  if (!unit) return res.redirect('/Inventory.html?error=unit');
 
   const exists = db.prepare('SELECT id FROM inventory WHERE LOWER(name) = LOWER(?)').get(name);
   if (exists) return res.redirect('/Inventory.html?error=dupe');

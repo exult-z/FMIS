@@ -18,7 +18,21 @@
 <div class="card"><h2>Add custom stock</h2>
 <form class="form" method="post" action="/inventory/add">
 <label class="field">Item name<input type="text" name="name" placeholder="e.g. Oat milk" required></label>
-<label class="field">Unit<input type="text" name="unit" value="units"></label>
+<label class="field">Unit<select name="unit" required>
+<option value="units" selected>units</option>
+<option value="mL">mL</option>
+<option value="L">L</option>
+<option value="g">g</option>
+<option value="kg">kg</option>
+<option value="pcs">pcs</option>
+<option value="bottles">bottles</option>
+<option value="packs">packs</option>
+<option value="bags">bags</option>
+<option value="sachets">sachets</option>
+<option value="scoops">scoops</option>
+<option value="Other">Other (enter unit)</option>
+</select></label>
+<label class="field" id="custom-unit-field" hidden>Custom unit<input type="text" name="customUnit" id="custom-unit-input" placeholder="e.g. pumps" maxlength="30"></label>
 <label class="field">Starting stock<input type="number" name="stock" min="0" value="0"></label>
 <button type="submit" class="btn pri">Add item</button>
 </form></div>
@@ -39,6 +53,15 @@
 </form></div>
 </main>
 <script>
+const unitSelect = document.querySelector('select[name="unit"]');
+const customUnitField = document.getElementById('custom-unit-field');
+const customUnitInput = document.getElementById('custom-unit-input');
+unitSelect.addEventListener('change', () => {
+  const isCustomUnit = unitSelect.value === 'Other';
+  customUnitField.hidden = !isCustomUnit;
+  customUnitInput.required = isCustomUnit;
+});
+
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const inv = db.inventory || [];
