@@ -27,23 +27,38 @@
   const sales = db.sales || [];
   const tbody = document.getElementById('sales-table-body');
   tbody.innerHTML = sales.length ? '' : '<tr><td colspan="5" class="sub">No sales yet today.</td></tr>';
+  
   let cash = 0, gcash = 0;
   for (const s of sales) {
-    if (s.method === 'Cash') cash += s.amount; else gcash += s.amount;
+    // FIXED: Case-insensitive check for the payment method
+    const methodStr = String(s.method || '').trim().toLowerCase();
+    
+    if (methodStr === 'cash') {
+      cash += s.amount;
+    } else if (methodStr === 'gcash') {
+      gcash += s.amount;
+    }
+
+    // UI styling check
+    const isCashUI = methodStr === 'cash';
+    
     tbody.insertAdjacentHTML('beforeend', `
       <tr><td>${s.time}</td><td>${s.order}</td>
-      <td><span class="pill ${s.method === 'Cash' ? 'cash' : 'gcash'}">${s.method}</span></td>
+      <td><span class="pill ${isCashUI ? 'cash' : 'gcash'}">${s.method}</span></td>
       <td><b>₱ ${s.amount}</b></td>
       <td><form method="post" action="/void-sale" onsubmit="return confirm('Void sale #${s.id}?')">
       <input type="hidden" name="saleId" value="${s.id}">
       <button type="submit" class="btn sm">Void</button></form></td></tr>`);
   }
+  
   const total = cash + gcash;
-  l_cash.textContent = '₱ ' + cash;
-  l_gcash.textContent = '₱ ' + gcash;
-  l_total.textContent = '₱ ' + total;
-  l_cash_bar.style.width = total ? (cash / total * 100) + '%' : '0%';
-  l_gcash_bar.style.width = total ? (gcash / total * 100) + '%' : '0%';
+  document.getElementById('l-cash').textContent = '₱ ' + cash;
+  document.getElementById('l-gcash').textContent = '₱ ' + gcash;
+  document.getElementById('l-total').textContent = '₱ ' + total;
+  
+  document.getElementById('l-cash-bar').style.width = total ? (cash / total * 100) + '%' : '0%';
+  document.getElementById('l-gcash-bar').style.width = total ? (gcash / total * 100) + '%' : '0%';
+  
   document.getElementById('ledger-sub').textContent =
     new Date().toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' })
     + ` · ${sales.length} sale${sales.length === 1 ? '' : 's'}`;
