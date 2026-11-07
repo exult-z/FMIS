@@ -12,7 +12,7 @@
 <div class="card"><h2>Audit log</h2>
 <p class="sub">Newest first. Every recorded action across the app.</p>
 <div class="scroll"><table>
-<thead><tr><th>When</th><th>User</th><th>Action</th></tr></thead>
+<thead><tr><th>When</th><th>User</th><th>Payment method</th><th>Action</th></tr></thead>
 <tbody id="logs-body"></tbody>
 </table></div></div>
 </main>
@@ -21,10 +21,15 @@
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const logs = db.logs || [];
   const tbody = document.getElementById('logs-body');
-  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="3" class="sub">No activity yet.</td></tr>';
+  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="4" class="sub">No activity yet.</td></tr>';
   for (const l of logs) {
+    const paymentMatch = /^(?:Recorded|Voided) sale\b/i.test(l.action)
+      ? l.action.match(/,\s*(Cash|GCash)(?=\)|;)/i)
+      : null;
+    const paymentMethod = paymentMatch ? paymentMatch[1] : '—';
+    const action = paymentMatch ? l.action.replace(paymentMatch[0], '') : l.action;
     tbody.insertAdjacentHTML('beforeend',
-      `<tr><td>${l.when}</td><td>${l.user}</td><td>${l.action}</td></tr>`);
+      `<tr><td>${l.when}</td><td>${l.user}</td><td>${paymentMethod}</td><td>${action}</td></tr>`);
   }
 })();
 </script>
