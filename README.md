@@ -15,3 +15,10 @@
 - Owners can set or edit an inventory item's expiration date on **Inventory**. The system shows an in-app notice on owner pages when stocked items are expired or will expire within seven days.
 - Expiration is tracked as one date per inventory item; restocking can update that tracked date.
 - Sale, wastage, and save actions submit directly without browser confirmation pop-ups.
+
+## Demand forecast
+
+- Owners and baristas can open **Forecast** to view projected ingredient run-out dates and likely top-selling cup products for the current week and month.
+- Ingredient projections use the Cumulative Demand Run-Out method: recorded ingredient consumption is averaged across up to the last 30 calendar days, including days with no sales, then compared with current stock. Recipe consumption must have been recorded for an ingredient to produce a run-out estimate.
+- Product projections add current-period sales through yesterday to the recent average daily sales multiplied by the number of days remaining in the week or month. Add-ons are excluded.
+- Forecasts are estimates based on recorded history, not guarantees. New or changed recipes, missing recipe entries, or changed incompatible units can reduce the available history or prevent a stock estimate.

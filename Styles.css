@@ -113,6 +113,7 @@ td{padding:9px 8px;border-bottom:1px solid var(--ln);vertical-align:middle}
 .seg a.on{background:var(--pri);color:var(--pi)}
 .goalrow{margin:14px 0 0;display:flex;justify-content:space-between}
 .goalrow .pct{color:var(--br)}
+.forecast-leader{display:block;font-size:18px;margin-top:8px;overflow-wrap:anywhere}
 
 
 /* Role-based access. Backend sets <body data-role="owner|barista|reviewer">.

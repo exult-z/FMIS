@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Forecast</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head><body data-role="owner">
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
+<nav>
+  <a href="Index.html">Take order</a>
+  <a href="Ledger.html">Daily ledger</a>
+  <a href="Inventory.html">Inventory</a>
+  <a href="Sales.html">Sales chart</a>
+  <a href="Forecast.html" class="on" aria-current="page">Forecast</a>
+  <a href="Prices.html">Menu &amp; prices</a>
+  <a href="Report.html">Daily report</a>
+  <a href="Logs.html">Audit log</a>
+  <a href="Settings.html">Settings</a>
+</nav>
+<main>
+  <p class="alert" id="forecast-error" role="alert" hidden></p>
+  <div class="card">
+    <h2>Ingredient stock run-out</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Ingredient</th><th>Current stock</th><th>Average use / day</th><th>Estimated run-out</th><th>Month stock runs out</th></tr></thead>
+      <tbody id="forecast-inventory"></tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <h2>Likely bestsellers</h2>
+    <div class="grid3">
+      <section class="stat"><span>Most likely this week</span><b id="forecast-week" class="forecast-leader">Loading…</b><div id="forecast-week-window" class="sub"></div><div id="forecast-week-runners" class="sub"></div></section>
+      <section class="stat"><span>Most likely this month</span><b id="forecast-month" class="forecast-leader">Loading…</b><div id="forecast-month-window" class="sub"></div><div id="forecast-month-runners" class="sub"></div></section>
+    </div>
+  </div>
+</main>
+<script src="forecast.js"></script>
+<script src="user.js"></script>
+</body></html>

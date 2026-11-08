@@ -161,6 +161,29 @@ function dateKeyOffset(days) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function addDaysToDateKey(value, days) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function daysBetweenDateKeys(start, end) {
+  const [startYear, startMonth, startDay] = start.split('-').map(Number);
+  const [endYear, endMonth, endDay] = end.split('-').map(Number);
+  return (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86400000;
+}
+
+function mondayOfDateKey(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return addDaysToDateKey(value, -((date.getUTCDay() + 6) % 7));
+}
+
+function lastDayOfMonthDateKey(value) {
+  const [year, month] = value.split('-').map(Number);
+  return `${year}-${String(month).padStart(2, '0')}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`;
+}
+
 function isValidDateKey(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -337,10 +360,10 @@ app.use((req, res, next) => {
   }
 
   if (req.user.role === 'barista' &&
-      ['/index.html', '/ledger.html', '/inventory.html', '/sales.html', '/prices.html', '/report.html', '/logs.html'].includes(lowerPath)) {
+      ['/index.html', '/ledger.html', '/inventory.html', '/sales.html', '/forecast.html', '/prices.html', '/report.html', '/logs.html'].includes(lowerPath)) {
     return res.redirect('/Barista_index.html');
   }
-  if (req.user.role === 'owner' && lowerPath.startsWith('/barista_')) {
+  if (req.user.role === 'owner' && (lowerPath.startsWith('/barista_') || lowerPath === '/barista_forecast.html')) {
     return res.redirect('/Index.html');
   }
   next();
@@ -352,6 +375,7 @@ const PUBLIC_FILES = new Map([
   ['/barista_inventory.html', 'Barista_inventory.html'],
   ['/barista_ledger.html', 'Barista_ledger.html'],
   ['/barista_sales.html', 'Barista_sales.html'],
+  ['/barista_forecast.html', 'Barista_Forecast.html'],
   ['/index.html', 'Index.html'],
   ['/inventory.html', 'Inventory.html'],
   ['/ledger.html', 'Ledger.html'],
@@ -360,6 +384,9 @@ const PUBLIC_FILES = new Map([
   ['/prices.html', 'Prices.html'],
   ['/report.html', 'Report.html'],
   ['/sales.html', 'Sales.html'],
+  ['/forecast.html', 'Forecast.html'],
+  ['/forecast.js', 'forecast.js'],
+  ['/user.js', 'user.js'],
   ['/settings.html', 'Settings.html'],
   ['/styles.css', 'Styles.css']
 ]);
@@ -594,6 +621,136 @@ app.get('/api/report', (req, res) => {
     signedBy: rep.signedBy,
     signedAt: rep.signedAt,
     logs
+  });
+});
+
+app.get('/api/forecast', (req, res) => {
+  const today = todayKey();
+  const lookbackStart = dateKeyOffset(-30);
+  const firstTrackedSale = db.prepare(`
+    SELECT MIN(date) AS firstDate
+    FROM sales
+    WHERE inventory_tracked = 1 AND date >= ? AND date < ?
+  `).get(lookbackStart, today).firstDate;
+  const inventoryHistoryDays = firstTrackedSale
+    ? daysBetweenDateKeys(firstTrackedSale, today)
+    : 0;
+  const inventoryById = new Map(
+    db.prepare('SELECT id, name, unit, stock FROM inventory').all().map(item => [item.id, item])
+  );
+  const usageById = new Map();
+
+  if (inventoryHistoryDays > 0) {
+    const consumptionRows = db.prepare(`
+      SELECT sc.inventory_id AS inventoryId, sc.quantity, sc.unit
+      FROM sale_consumption sc
+      JOIN sales s ON s.id = sc.sale_id
+      WHERE s.inventory_tracked = 1 AND s.date >= ? AND s.date < ?
+    `).all(lookbackStart, today);
+
+    for (const row of consumptionRows) {
+      const item = inventoryById.get(row.inventoryId);
+      if (!item) continue;
+
+      const fromUnit = normalizeUnit(row.unit);
+      const toUnit = normalizeUnit(item.unit);
+      const fromGroup = unitGroup(fromUnit);
+      const toGroup = unitGroup(toUnit);
+      const compatible = fromUnit === toUnit || (fromGroup && fromGroup === toGroup);
+      const usage = usageById.get(row.inventoryId) || { quantity: 0, incompatibleUnits: false };
+      if (!compatible) {
+        usage.incompatibleUnits = true;
+      } else {
+        const quantity = convertQuantityToUnit(Number(row.quantity), row.unit, item.unit);
+        if (Number.isFinite(quantity) && quantity >= 0) usage.quantity += quantity;
+        else usage.incompatibleUnits = true;
+      }
+      usageById.set(row.inventoryId, usage);
+    }
+  }
+
+  const inventory = [...inventoryById.values()].map(item => {
+    const usage = usageById.get(item.id);
+    const averageDailyUse = inventoryHistoryDays > 0 && usage && !usage.incompatibleUnits
+      ? usage.quantity / inventoryHistoryDays
+      : null;
+    let status = 'no-history';
+    let runOutDate = null;
+    if (item.stock <= 0) {
+      status = 'out';
+      runOutDate = today;
+    } else if (inventoryHistoryDays > 0 && usage && usage.incompatibleUnits) {
+      status = 'unit-mismatch';
+    } else if (averageDailyUse !== null && averageDailyUse > 0) {
+      status = 'forecast';
+      runOutDate = addDaysToDateKey(today, Math.floor(item.stock / averageDailyUse));
+    } else if (inventoryHistoryDays > 0) {
+      status = 'no-demand';
+    }
+
+    return {
+      id: item.id,
+      name: item.name,
+      unit: item.unit,
+      stock: item.stock,
+      averageDailyUse,
+      runOutDate,
+      status
+    };
+  });
+
+  const firstProductSale = db.prepare(`
+    SELECT MIN(s.date) AS firstDate
+    FROM sales s JOIN sale_items si ON si.sale_id = s.id
+    WHERE si.is_cup = 1 AND s.date >= ? AND s.date < ?
+  `).get(lookbackStart, today).firstDate;
+  const productHistoryDays = firstProductSale
+    ? daysBetweenDateKeys(firstProductSale, today)
+    : 0;
+  const weekStart = mondayOfDateKey(today);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const weekEnd = addDaysToDateKey(weekStart, 6);
+  const monthEnd = lastDayOfMonthDateKey(today);
+  const productQueryStart = monthStart < lookbackStart ? monthStart : lookbackStart;
+  const productRows = db.prepare(`
+    SELECT si.name,
+           SUM(CASE WHEN s.date >= ? AND s.date < ? THEN si.qty ELSE 0 END) AS recentQuantity,
+           SUM(CASE WHEN s.date >= ? AND s.date < ? THEN si.qty ELSE 0 END) AS weekToDate,
+           SUM(CASE WHEN s.date >= ? AND s.date < ? THEN si.qty ELSE 0 END) AS monthToDate
+    FROM sale_items si
+    JOIN sales s ON s.id = si.sale_id
+    WHERE si.is_cup = 1 AND s.date >= ? AND s.date < ?
+    GROUP BY si.name
+  `).all(lookbackStart, today, weekStart, today, monthStart, today, productQueryStart, today);
+
+  function topProducts(period, endDate) {
+    const remainingDays = daysBetweenDateKeys(today, endDate) + 1;
+    if (!productHistoryDays || !productRows.length) {
+      return { remainingDays, leaders: [] };
+    }
+    const quantityKey = period === 'week' ? 'weekToDate' : 'monthToDate';
+    const leaders = productRows.map(row => {
+      const recentAverage = row.recentQuantity / productHistoryDays;
+      const soldSoFar = row[quantityKey] || 0;
+      return {
+        name: row.name,
+        soldSoFar,
+        projectedTotal: soldSoFar + recentAverage * remainingDays
+      };
+    }).sort((a, b) => b.projectedTotal - a.projectedTotal || b.soldSoFar - a.soldSoFar || a.name.localeCompare(b.name));
+    return { remainingDays, leaders: leaders.slice(0, 3) };
+  }
+
+  res.json({
+    method: 'Cumulative Demand Run-Out',
+    date: today,
+    lookbackDays: inventoryHistoryDays,
+    productLookbackDays: productHistoryDays,
+    inventory,
+    bestsellers: {
+      week: { startDate: weekStart, endDate: weekEnd, ...topProducts('week', weekEnd) },
+      month: { startDate: monthStart, endDate: monthEnd, ...topProducts('month', monthEnd) }
+    }
   });
 });
 
