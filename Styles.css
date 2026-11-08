@@ -100,6 +100,13 @@ td{padding:9px 8px;border-bottom:1px solid var(--ln);vertical-align:middle}
 .recipe-entry .recipe-remove{align-self:end}
 .form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .form input[type=number]{width:90px}
+.form.form-grid{display:grid;align-items:end;gap:12px}
+.inventory-add-form{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+.menu-add-form{grid-template-columns:minmax(0,1fr) 150px auto}
+.form-grid .field{min-width:0;margin:0}
+.form-grid .field input,.form-grid .field select{display:block;width:100%;margin-top:4px}
+.form-grid>.btn{min-width:140px}
+@media(max-width:600px){.menu-add-form{grid-template-columns:minmax(0,1fr) minmax(100px,140px)}.menu-add-form>.btn{grid-column:1/-1}}
 @media(max-width:700px){.recipe-entry{grid-template-columns:minmax(0,1fr)}.recipe-entry .recipe-remove{justify-self:end}}
 @container (max-width:360px){.recipe-entry .recipe-edit{grid-template-columns:minmax(0,1fr)}.recipe-entry .recipe-name{grid-column:1}}
 
