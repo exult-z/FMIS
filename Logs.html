@@ -7,34 +7,74 @@
 </head><body data-role="owner">
 <header><div class="logo">CS</div><h1>CupSion</h1>
 <span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
-<nav><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Forecast.html">Forecast</a><a href="Prices.html">Menu & prices</a><a href="Report.html">Daily report</a><a href="Logs.html" class="on" aria-current="page">Audit log</a><a href="Settings.html">Settings</a></nav>
+<nav><a href="Dashboard.html">Dashboard</a><a href="Index.html">Take order</a><a href="Ledger.html">Daily ledger</a><a href="Inventory.html">Inventory</a><a href="Sales.html">Sales chart</a><a href="Forecast.html">Forecast</a><a href="Prices.html">Menu & prices</a><a href="Report.html">Daily report</a><a href="Logs.html" class="on" aria-current="page">Audit log</a><a href="Settings.html">Settings</a></nav>
 <main>
 <div class="card"><h2>Audit log</h2>
 <p class="sub">Newest first. Every recorded action across the app.</p>
-<div class="scroll"><table>
-<thead><tr><th>When</th><th>User</th><th>Payment method</th><th>Customer total</th><th>Action</th></tr></thead>
-<tbody id="logs-body"></tbody>
-</table></div></div>
+<div id="logs-groups"></div>
+</div>
 </main>
 <script>
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
+const logCategories = [
+  { title: 'Order', matches: action => /^(?:Recorded sale|Voided sale|Attempted to void .*sale)\b/i.test(action) },
+  { title: 'Update of menu', matches: action => /^(?:Updated|Added|Removed) menu item\b/i.test(action) },
+  { title: 'Added ingredient', matches: action => /^Added inventory item\b/i.test(action) },
+  { title: 'Removed ingredient', matches: action => /^(?:Removed inventory item\b|Removed .+ from .+ recipe\b)/i.test(action) },
+  { title: 'Restocked', matches: action => /^Restocked\b/i.test(action) },
+  { title: 'Set ingredient recipe', matches: action => /^Set .+ per .+/i.test(action) },
+  { title: 'Barista account registered', matches: action => /^Registered barista account\b/i.test(action) },
+  { title: 'Password changed', matches: action => /^Changed account password\b/i.test(action) },
+  { title: 'Inventory unit updated', matches: action => /^Updated unit for\b/i.test(action) },
+  { title: 'Expiration date updated', matches: action => /^Updated expiration date\b/i.test(action) },
+  { title: 'Expiration date cleared', matches: action => /^Cleared expiration date\b/i.test(action) },
+  { title: 'Wastage logged', matches: action => /^Logged wastage\b/i.test(action) },
+  { title: 'Daily report verified', matches: action => /^Verified & signed off daily report\b/i.test(action) },
+  { title: 'Report verification reset', matches: action => /^Reset report verification\b/i.test(action) },
+  { title: 'Other activity', matches: () => true }
+];
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const logs = db.logs || [];
-  const tbody = document.getElementById('logs-body');
-  tbody.innerHTML = logs.length ? '' : '<tr><td colspan="5" class="sub">No activity yet.</td></tr>';
-  for (const l of logs) {
-    const saleMatch = l.action.match(/^(?:Recorded|Voided) sale\b.*?₱\s*([\d,]+),\s*(Cash|GCash)(?=\)|;)/i);
-    const paymentMethod = saleMatch ? saleMatch[2] : '—';
-    const customerTotal = saleMatch ? `₱ ${saleMatch[1]}` : '—';
-    const action = saleMatch
-      ? l.action.replace(/(?:\s*–\s*)?₱\s*[\d,]+,\s*(?:Cash|GCash)/i, '').replace(/\(\s*\);/, ';').replace(/\s+;/, ';')
-      : l.action;
-    tbody.insertAdjacentHTML('beforeend',
-      `<tr><td>${escapeHtml(l.when)}</td><td>${escapeHtml(l.user)}</td><td>${paymentMethod}</td><td>${escapeHtml(customerTotal)}</td><td>${escapeHtml(action)}</td></tr>`);
+  const groups = new Map(logCategories.map(category => [category.title, []]));
+  for (const log of logs) {
+    const category = logCategories.find(({ matches }) => matches(log.action));
+    groups.get(category.title).push(log);
   }
+
+  const groupMarkup = [...groups].filter(([, entries]) => entries.length).map(([title, entries]) => `
+    <details class="audit-group">
+      <summary aria-label="${escapeHtml(title)} (${entries.length} entries)">
+        <h3>${escapeHtml(title)} <span class="audit-count">${entries.length}</span></h3>
+      </summary>
+      <div class="scroll"><table>
+        <thead><tr>${(title === 'Order'
+          ? ['When', 'User', 'Payment method', 'Customer total', 'Action']
+          : title === 'Added ingredient'
+            ? ['When', 'User', 'Ingredient', 'Quantity', 'Unit']
+            : ['When', 'User', 'Action']).map(heading => `<th>${heading}</th>`).join('')}</tr></thead>
+        <tbody>${entries.map(log => {
+          if (title === 'Order') {
+            const saleMatch = log.action.match(/^(?:Recorded|Voided) sale\b.*?₱\s*([\d,]+),\s*(Cash|GCash)(?=\)|;)/i);
+            const paymentMethod = saleMatch ? saleMatch[2] : '—';
+            const customerTotal = saleMatch ? `₱ ${saleMatch[1]}` : '—';
+            const action = saleMatch
+              ? log.action.replace(/(?:\s*–\s*)?₱\s*[\d,]+,\s*(?:Cash|GCash)/i, '').replace(/\(\s*\);/, ';').replace(/\s+;/, ';')
+              : log.action;
+            return `<tr><td>${escapeHtml(log.when)}</td><td>${escapeHtml(log.user)}</td><td>${paymentMethod}</td><td>${escapeHtml(customerTotal)}</td><td>${escapeHtml(action)}</td></tr>`;
+          }
+          if (title === 'Added ingredient') {
+            const ingredientMatch = log.action.match(/^Added inventory item "(.+)" \((-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s+(.+)\)$/i);
+            return `<tr><td>${escapeHtml(log.when)}</td><td>${escapeHtml(log.user)}</td><td>${escapeHtml(ingredientMatch ? ingredientMatch[1] : log.action)}</td><td>${escapeHtml(ingredientMatch ? ingredientMatch[2] : '—')}</td><td>${escapeHtml(ingredientMatch ? ingredientMatch[3] : '—')}</td></tr>`;
+          }
+          return `<tr><td>${escapeHtml(log.when)}</td><td>${escapeHtml(log.user)}</td><td>${escapeHtml(log.action)}</td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </details>`).join('');
+  document.getElementById('logs-groups').innerHTML =
+    groupMarkup || '<p class="sub">No activity yet.</p>';
 })();
 </script>
 <script src="user.js"></script>

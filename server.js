@@ -360,7 +360,7 @@ app.use((req, res, next) => {
   }
 
   if (req.user.role === 'barista' &&
-      ['/index.html', '/ledger.html', '/inventory.html', '/sales.html', '/forecast.html', '/prices.html', '/report.html', '/logs.html'].includes(lowerPath)) {
+      ['/dashboard.html', '/index.html', '/ledger.html', '/inventory.html', '/sales.html', '/forecast.html', '/prices.html', '/report.html', '/logs.html'].includes(lowerPath)) {
     return res.redirect('/Barista_index.html');
   }
   if (req.user.role === 'owner' && (lowerPath.startsWith('/barista_') || lowerPath === '/barista_forecast.html')) {
@@ -376,6 +376,7 @@ const PUBLIC_FILES = new Map([
   ['/barista_ledger.html', 'Barista_ledger.html'],
   ['/barista_sales.html', 'Barista_sales.html'],
   ['/barista_forecast.html', 'Barista_Forecast.html'],
+  ['/dashboard.html', 'Dashboard.html'],
   ['/index.html', 'Index.html'],
   ['/inventory.html', 'Inventory.html'],
   ['/ledger.html', 'Ledger.html'],

@@ -1,5 +1,12 @@
 # FMIS
 
+## Selenium browser tests
+
+- Install dependencies with `npm install`.
+- Install Google Chrome or Chromium; Selenium Manager will locate or download the compatible ChromeDriver when the tests run.
+- Run the end-to-end system test with `npm test` (or `npm run test:selenium`).
+- The test starts an isolated FMIS server and SQLite database in a temporary directory, then removes them after the run. It does not use or modify the normal application database.
+
 ## Accounts
 
 - The initial owner username is `owner` and the initial password is `1234`.

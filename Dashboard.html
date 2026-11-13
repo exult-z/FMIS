@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CupSion FMIS · Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Work+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head><body data-role="owner">
+<header><div class="logo">CS</div><h1>CupSion</h1>
+<span class="who">Maria Santos · Owner</span><a class="out" href="/logout">Log out</a></header>
+<nav>
+  <a href="Dashboard.html" class="on" aria-current="page">Dashboard</a>
+  <a href="Index.html">Take order</a>
+  <a href="Ledger.html">Daily ledger</a>
+  <a href="Inventory.html">Inventory</a>
+  <a href="Sales.html">Sales chart</a>
+  <a href="Forecast.html">Forecast</a>
+  <a href="Prices.html">Menu &amp; prices</a>
+  <a href="Report.html">Daily report</a>
+  <a href="Logs.html">Audit log</a>
+  <a href="Settings.html">Settings</a>
+</nav>
+<main>
+  <div class="card">
+    <h2>Dashboard</h2>
+    <p class="sub" id="dashboard-date">Loading today's overview…</p>
+    <p class="alert" id="dashboard-error" role="alert" hidden></p>
+    <div class="dashboard-stats">
+      <div class="stat dk"><span>Sales today</span><span class="num" id="dashboard-sales">₱ 0</span></div>
+      <div class="stat"><span>Orders today</span><span class="num" id="dashboard-orders">0</span></div>
+      <div class="stat"><span>Low-stock items</span><span class="num" id="dashboard-low-stock">0</span></div>
+      <div class="stat"><span>Expired / expiring</span><span class="num" id="dashboard-expiring">0</span></div>
+    </div>
+    <p class="sub" id="dashboard-inventory-summary"></p>
+  </div>
+
+  <div class="dashboard-columns">
+    <section class="card">
+      <h2>Sales · last 7 days</h2>
+      <div id="dashboard-sales-trend"></div>
+    </section>
+    <section class="card">
+      <h2>Top drinks today</h2>
+      <div id="dashboard-products"></div>
+      <a class="dashboard-link" href="Sales.html">View sales chart</a>
+    </section>
+    <section class="card">
+      <h2>Inventory attention</h2>
+      <div id="dashboard-inventory-alerts"></div>
+      <a class="dashboard-link" href="Inventory.html">Manage inventory</a>
+    </section>
+    <section class="card">
+      <h2>Daily report</h2>
+      <p class="sub">Review and sign off today's activity.</p>
+      <p class="dashboard-report-status" id="dashboard-report-status">Loading…</p>
+      <a class="dashboard-link" href="Report.html">Open daily report</a>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Recent orders</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Time</th><th>Order</th><th>Payment</th><th>Total</th><th>Recorded by</th></tr></thead>
+      <tbody id="dashboard-recent-orders"></tbody>
+    </table></div>
+    <a class="dashboard-link" href="Ledger.html">View daily ledger</a>
+  </section>
+</main>
+<script>
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
+const money = value => '₱ ' + Number(value || 0).toLocaleString();
+const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+(async () => {
+  try {
+    const [dbResponse, reportResponse] = await Promise.all([
+      fetch('/api/db?t=' + Date.now()),
+      fetch('/api/report?t=' + Date.now())
+    ]);
+    if (!dbResponse.ok || !reportResponse.ok) {
+      throw new Error('Dashboard data could not be loaded.');
+    }
+    const [db, report] = await Promise.all([dbResponse.json(), reportResponse.json()]);
+    const inventory = db.inventory || [];
+    const lowStock = inventory.filter(item => Number(item.stock) < 15);
+    const expiring = db.expiryAlerts || [];
+    const menuCount = Object.keys(db.menu || {}).length;
+
+    document.getElementById('dashboard-date').textContent =
+      new Date(`${report.date}T12:00:00`).toLocaleDateString(undefined, {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+    document.getElementById('dashboard-sales').textContent = money(report.total);
+    document.getElementById('dashboard-orders').textContent = report.count || 0;
+    document.getElementById('dashboard-low-stock').textContent = lowStock.length;
+    document.getElementById('dashboard-expiring').textContent = expiring.length;
+    document.getElementById('dashboard-inventory-summary').textContent =
+      `${inventory.length} inventory item(s) · ${menuCount} menu item(s)`;
+    document.getElementById('dashboard-report-status').textContent = report.status || 'Pending review';
+
+    const today = new Date(`${report.date}T12:00:00`);
+    const trend = [];
+    for (let offset = 6; offset >= 0; offset--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - offset);
+      const key = dateKey(date);
+      const total = key === report.date ? Number(report.total || 0) : Number((db.history || {})[key]?.total || 0);
+      trend.push({
+        label: date.toLocaleDateString(undefined, { weekday: 'short' }),
+        total
+      });
+    }
+    const maxSales = Math.max(1, ...trend.map(day => day.total));
+    document.getElementById('dashboard-sales-trend').innerHTML = trend.map(day => {
+      const width = day.total ? Math.max(2, Math.round(day.total / maxSales * 100)) : 0;
+      return `<div class="dashboard-trend-row">
+        <span>${escapeHtml(day.label)}</span>
+        <div class="dashboard-trend-track"><i style="width:${width}%"></i></div>
+        <b>${escapeHtml(money(day.total))}</b>
+      </div>`;
+    }).join('');
+
+    const products = Object.entries(report.cups || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    document.getElementById('dashboard-products').innerHTML = products.length
+      ? products.map(([name, quantity]) =>
+        `<div class="row"><span class="g">${escapeHtml(name)}</span><b>${escapeHtml(quantity)} sold</b></div>`
+      ).join('')
+      : '<p class="sub">No products sold today yet.</p>';
+
+    const expiringById = new Map(expiring.map(item => [item.id, item]));
+    const inventoryAlerts = inventory.map(item => {
+      const notices = [];
+      if (Number(item.stock) < 15) notices.push(`${item.stock} ${item.unit} remaining (low stock)`);
+      const expiry = expiringById.get(item.id);
+      if (expiry) {
+        const expired = expiry.expiresOn < report.date;
+        notices.push(`${expired ? 'expired' : 'expires'} on ${expiry.expiresOn}`);
+      }
+      return notices.length ? `${item.name}: ${notices.join('; ')}` : null;
+    }).filter(Boolean);
+    document.getElementById('dashboard-inventory-alerts').innerHTML = inventoryAlerts.length
+      ? `<ul class="dashboard-alert-list">${inventoryAlerts.map(alert => `<li>${escapeHtml(alert)}</li>`).join('')}</ul>`
+      : '<p class="sub">No low-stock or upcoming-expiration alerts.</p>';
+
+    const recentOrders = (db.sales || []).slice(0, 5);
+    document.getElementById('dashboard-recent-orders').innerHTML = recentOrders.length
+      ? recentOrders.map(sale => `<tr>
+          <td>${escapeHtml(sale.time || '—')}</td>
+          <td>${escapeHtml(sale.order || '—')}</td>
+          <td>${escapeHtml(sale.method || '—')}</td>
+          <td>${escapeHtml(money(sale.amount))}</td>
+          <td>${escapeHtml(sale.recordedBy || '—')}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="sub">No orders recorded yet.</td></tr>';
+  } catch {
+    const error = document.getElementById('dashboard-error');
+    error.textContent = 'Dashboard data could not be loaded. Refresh the page to try again.';
+    error.hidden = false;
+  }
+})();
+</script>
+<script src="user.js"></script>
+</body></html>
