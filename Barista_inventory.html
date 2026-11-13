@@ -12,7 +12,7 @@
 <div class="card"><h2>Stock & supplies</h2>
 <p class="sub">Live stock levels. Ask the owner to restock or add items.</p>
 <div class="scroll"><table>
-<thead><tr><th>Item</th><th>Stock</th><th>Status</th></tr></thead>
+<thead><tr><th>Item</th><th>Stock</th><th>Status / expiration</th></tr></thead>
 <tbody id="b-inv-body"></tbody>
 </table></div></div>
 
@@ -28,6 +28,9 @@
 </form></div>
 </main>
 <script>
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const inv = db.inventory || [];
@@ -35,17 +38,20 @@
   tbody.innerHTML = inv.length ? '' : '<tr><td colspan="3" class="sub">No inventory records.</td></tr>';
 
   for (const it of inv) {
-    const isLow = it.stock < 15;
+    const stockStatus = it.stockStatus || 'ok';
+    const statusLabel = stockStatus === 'critical' ? 'Critical' : stockStatus === 'low' ? 'Low stock' : 'OK';
+    const expiryLabel = it.expirationStatus === 'expired' ? `<span class="pill expired">Expired ${escapeHtml(it.expiresOn)}</span>`
+      : it.expirationStatus === 'expiring' ? `<span class="pill expiring">Expires ${escapeHtml(it.expiresOn)}</span>` : '';
     tbody.insertAdjacentHTML('beforeend', `
       <tr>
-        <td><b>${it.name}</b></td>
-        <td><b class="${isLow ? 'text-low' : ''}">${it.stock} ${it.unit || ''}</b></td>
-        <td><span class="pill ${isLow ? 'low' : 'ok'}">${isLow ? 'Low' : 'OK'}</span></td>
+        <td><b>${escapeHtml(it.name)}</b></td>
+        <td><b class="${stockStatus === 'ok' ? '' : `text-${stockStatus}`}">${escapeHtml(it.stock)} ${escapeHtml(it.unit || '')}</b></td>
+        <td><span class="pill ${stockStatus}">${statusLabel}</span> ${expiryLabel}</td>
       </tr>`);
   }
 
   const sel = document.getElementById('b-waste-item');
-  sel.innerHTML = inv.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
+  sel.innerHTML = inv.map(it => `<option value="${escapeHtml(it.id)}">${escapeHtml(it.name)}</option>`).join('');
 })();
 </script>
 <script src="user.js"></script>

@@ -12,16 +12,15 @@
 <p class="alert" id="recipe-message" role="status" hidden></p>
 
 <div class="card"><h2>Current menu</h2>
-<p class="sub">Set each product's ingredient amount and recipe unit independently. The amount you enter is deducted from inventory for each item sold.</p>
+<p class="sub">Set every ingredient's amount and recipe unit for each product. Selling prices are calculated from recipe costs to maintain at least a 15% profit margin. Enter purchase quantities and costs in Inventory; each restock updates the weighted-average ingredient cost. Prices round up to the nearest peso.</p>
 <table>
-<thead><tr><th>Item</th><th>Price (₱)</th><th>Save</th><th>Ingredients per item</th><th></th></tr></thead>
+<thead><tr><th>Item</th><th>Selling price (₱)</th><th>Ingredients per item</th><th></th></tr></thead>
 <tbody id="prices-body"></tbody>
 </table></div>
 
 <div class="card"><h2>Add new item</h2>
 <form class="form form-grid menu-add-form" method="post" action="/menu/add">
 <label class="field">Item name<input type="text" name="name" placeholder="e.g. Strawberry Latte" required></label>
-<label class="field">Price (₱)<input type="number" name="price" min="1" placeholder="80" required></label>
 <button type="submit" class="btn pri">Add item</button>
 </form></div>
 
@@ -37,7 +36,7 @@ const recipeParams = new URLSearchParams(location.search);
   const inventory = db.inventory || [];
   const tbody = document.getElementById('prices-body');
   const entries = Object.entries(menu);
-  tbody.innerHTML = entries.length ? '' : '<tr><td colspan="5" class="sub">No menu items yet.</td></tr>';
+  tbody.innerHTML = entries.length ? '' : '<tr><td colspan="4" class="sub">No menu items yet.</td></tr>';
 
   for (const [id, it] of entries) {
     const recipes = (it.ingredients || []).map(ingredient => `
@@ -63,17 +62,17 @@ const recipeParams = new URLSearchParams(location.search);
     const options = inventory.map(item =>
       `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} (${escapeHtml(item.unit)})</option>`).join('');
     tbody.insertAdjacentHTML('beforeend', `
-      <tr>
+      <tr data-menu-id="${escapeHtml(id)}">
         <td>
           <form method="post" action="/menu/update" id="f-${id}">
             <input type="hidden" name="id" value="${id}">
             <input type="text" name="name" value="${escapeHtml(it.name)}" required>
+            <button type="submit" class="btn sm">Save name</button>
           </form>
         </td>
-        <td>
-            <input type="number" name="price" value="${it.price}" min="1" required form="f-${id}">
-        </td>
-        <td><button type="submit" class="btn sm pri" form="f-${id}">Save</button></td>
+        <td>₱ ${escapeHtml(it.price)}<small class="sub price-cost">${it.priceAutoCalculated
+          ? `Auto · ingredient cost ₱ ${Number(it.ingredientCost).toFixed(2)}`
+          : 'Add the full recipe and ingredient purchase costs to calculate automatically.'}</small></td>
         <td>
           <details data-menu-id="${escapeHtml(id)}">
             <summary>${(it.ingredients || []).length} ingredient(s)</summary>

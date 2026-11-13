@@ -39,7 +39,8 @@ db.exec(`
     name  TEXT NOT NULL,
     unit  TEXT NOT NULL DEFAULT 'units',
     stock REAL NOT NULL DEFAULT 0,
-    expires_on TEXT
+    expires_on TEXT,
+    unit_cost REAL
   );
 
   CREATE TABLE IF NOT EXISTS sales (
@@ -137,6 +138,10 @@ const inventoryColumns = db.prepare('PRAGMA table_info(inventory)').all().map(co
 if (!inventoryColumns.includes('expires_on')) {
   db.exec('ALTER TABLE inventory ADD COLUMN expires_on TEXT');
 }
+if (!inventoryColumns.includes('unit_cost')) {
+  db.exec('ALTER TABLE inventory ADD COLUMN unit_cost REAL');
+}
+db.exec("UPDATE inventory SET expires_on = NULL WHERE LOWER(name) = 'cups'");
 const recipeColumns = db.prepare('PRAGMA table_info(recipes)').all().map(column => column.name);
 if (!recipeColumns.includes('unit')) {
   db.exec("ALTER TABLE recipes ADD COLUMN unit TEXT NOT NULL DEFAULT 'units'");
@@ -240,6 +245,53 @@ function convertQuantityToUnit(value, fromUnit, toUnit) {
   if (fromGroup && toGroup && fromGroup !== toGroup) return NaN;
   return baseToUnit(unitToBase(value, from), to);
 }
+
+function inventoryStockStatus(stock) {
+  if (stock <= 50) return 'critical';
+  if (stock <= 100) return 'low';
+  return 'ok';
+}
+
+function calculateMenuCost(menuId) {
+  const ingredients = db.prepare(`
+    SELECT recipes.quantity, recipes.unit AS recipeUnit,
+           inventory.unit AS inventoryUnit, inventory.unit_cost AS unitCost,
+           inventory.name AS ingredientName, menu.is_cup AS isCup
+    FROM recipes
+    JOIN inventory ON inventory.id = recipes.inventory_id
+    JOIN menu ON menu.id = recipes.menu_id
+    WHERE recipes.menu_id = ?
+  `).all(menuId);
+  if (!ingredients.length || ingredients.some(ingredient => ingredient.unitCost === null)) return null;
+  if (ingredients[0].isCup && !ingredients.some(ingredient => ingredient.ingredientName.toLowerCase() !== 'cups')) {
+    return null;
+  }
+
+  let cost = 0;
+  for (const ingredient of ingredients) {
+    const quantity = convertQuantityToUnit(
+      ingredient.quantity,
+      ingredient.recipeUnit,
+      ingredient.inventoryUnit
+    );
+    if (!Number.isFinite(quantity) || quantity < 0) return null;
+    cost += quantity * ingredient.unitCost;
+  }
+  return Number.isFinite(cost) ? cost : null;
+}
+
+function updateMenuPrices(userName = null) {
+  const update = db.prepare('UPDATE menu SET price = ? WHERE id = ?');
+  for (const item of db.prepare('SELECT id, name, price FROM menu').all()) {
+    const ingredientCost = calculateMenuCost(item.id);
+    if (ingredientCost === null || ingredientCost <= 0) continue;
+    const price = Math.ceil(ingredientCost / 0.85 - 1e-9);
+    if (!Number.isSafeInteger(price) || price <= 0 || price === item.price) continue;
+    update.run(price, item.id);
+    if (userName) addLog(userName, `Automatically priced "${item.name}" at ₱ ${price} (15% profit margin)`);
+  }
+}
+updateMenuPrices();
 
 function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -510,22 +562,54 @@ function historyObject(user) {
 
 app.get('/api/db', (req, res) => {
   const menu = {};
-  for (const r of db.prepare('SELECT id, name, price FROM menu').all()) {
-    menu[r.id] = { name: r.name, price: r.price, ingredients: [] };
+  for (const r of db.prepare('SELECT id, name, price, is_cup AS isCup FROM menu').all()) {
+    menu[r.id] = { name: r.name, price: r.price, isCup: Boolean(r.isCup), ingredients: [] };
   }
   const recipes = db.prepare(`
     SELECT recipes.menu_id AS menuId, recipes.inventory_id AS inventoryId,
-           recipes.quantity, recipes.unit, inventory.name AS ingredientName
+           recipes.quantity, recipes.unit, inventory.name AS ingredientName,
+           inventory.unit AS inventoryUnit, inventory.stock, inventory.unit_cost AS unitCost
     FROM recipes JOIN inventory ON inventory.id = recipes.inventory_id
     ORDER BY inventory.name
   `).all();
   for (const recipe of recipes) {
-    if (menu[recipe.menuId]) menu[recipe.menuId].ingredients.push(recipe);
+    if (!menu[recipe.menuId]) continue;
+    recipe.requiredQuantity = convertQuantityToUnit(recipe.quantity, recipe.unit, recipe.inventoryUnit);
+    menu[recipe.menuId].ingredients.push(recipe);
+    if (!Number.isFinite(recipe.requiredQuantity) || recipe.stock < recipe.requiredQuantity) {
+      menu[recipe.menuId].available = false;
+      menu[recipe.menuId].unavailableIngredients = menu[recipe.menuId].unavailableIngredients || [];
+      menu[recipe.menuId].unavailableIngredients.push(recipe.ingredientName);
+    }
   }
 
-  const inventory = db.prepare('SELECT id, name, unit, stock, expires_on AS expiresOn FROM inventory').all();
+  for (const [menuId, item] of Object.entries(menu)) {
+    item.available = item.available !== false;
+    item.unavailableIngredients = item.unavailableIngredients || [];
+    item.ingredientCost = calculateMenuCost(menuId);
+    item.priceAutoCalculated = item.ingredientCost !== null && item.ingredientCost > 0;
+  }
+
+  const inventory = db.prepare(`
+    SELECT id, name, unit, stock, expires_on AS expiresOn, unit_cost AS unitCost
+    FROM inventory
+  `).all().map(item => {
+    const isCups = item.name.toLowerCase() === 'cups';
+    const expirationStatus = isCups || !item.expiresOn || !isValidDateKey(item.expiresOn)
+      ? 'none'
+      : item.expiresOn < todayKey()
+        ? 'expired'
+        : item.expiresOn <= dateKeyOffset(30)
+          ? 'expiring'
+          : 'ok';
+    return {
+      ...item,
+      stockStatus: inventoryStockStatus(item.stock),
+      expirationStatus
+    };
+  });
   const expiryAlerts = inventory
-    .filter(item => item.stock > 0 && item.expiresOn && isValidDateKey(item.expiresOn) && item.expiresOn <= dateKeyOffset(7))
+    .filter(item => item.stock > 0 && ['expired', 'expiring'].includes(item.expirationStatus))
     .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn));
 
   const sales = salesForUser(req.user);
@@ -798,6 +882,23 @@ app.post('/register-barista', requireOwner, (req, res) => {
   res.redirect('/Settings.html?registered=1');
 });
 
+app.post('/remove-barista', requireOwner, (req, res) => {
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const barista = db.prepare("SELECT username, name FROM users WHERE username = ? AND role = 'barista'").get(username);
+  if (!barista) return res.redirect('/Settings.html?error=barista_missing');
+
+  db.exec('BEGIN');
+  try {
+    db.prepare("DELETE FROM users WHERE username = ? AND role = 'barista'").run(barista.username);
+    addLog(req.user.name, `Removed barista account "${barista.name}" (${barista.username})`);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  res.redirect('/Settings.html?removed=1');
+});
+
 app.post('/change-password', (req, res) => {
   const currentPassword = String(req.body.currentPassword || '');
   const newPassword = String(req.body.newPassword || '');
@@ -957,18 +1058,24 @@ app.post('/inventory/add', requireOwner, (req, res) => {
   const unitChoice = (req.body.unit || 'units').trim();
   const unit = unitChoice === 'Other' ? (req.body.customUnit || '').trim() : unitChoice;
   const stock = Number(req.body.stock);
-  const expiresOn = String(req.body.expiresOn || '').trim();
+  const purchaseCostValue = String(req.body.purchaseCost ?? '').trim();
+  const purchaseCost = purchaseCostValue === '' ? null : Number(purchaseCostValue);
+  const expiresOn = name.toLowerCase() === 'cups' ? '' : String(req.body.expiresOn || '').trim();
   if (!name) return res.redirect('/Inventory.html?error=name');
   if (!unit) return res.redirect('/Inventory.html?error=unit');
   if (!Number.isFinite(stock) || stock < 0) return res.redirect('/Inventory.html?error=stock');
+  if ((purchaseCostValue !== '' && (!Number.isFinite(purchaseCost) || purchaseCost < 0))
+      || (purchaseCost !== null && stock <= 0)) return res.redirect('/Inventory.html?error=cost');
   if (expiresOn && !isValidDateKey(expiresOn)) return res.redirect('/Inventory.html?error=expiry');
 
   const exists = db.prepare('SELECT id FROM inventory WHERE LOWER(name) = LOWER(?)').get(name);
   if (exists) return res.redirect('/Inventory.html?error=dupe');
 
-  db.prepare('INSERT INTO inventory (id, name, unit, stock, expires_on) VALUES (?, ?, ?, ?, ?)')
-    .run('inv-' + Date.now(), name, unit, stock, expiresOn || null);
+  const unitCost = purchaseCost === null ? null : purchaseCost / stock;
+  db.prepare('INSERT INTO inventory (id, name, unit, stock, expires_on, unit_cost) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('inv-' + Date.now(), name, unit, stock, expiresOn || null, unitCost);
   addLog(req.user.name, `Added inventory item "${name}" (${stock} ${unit})`);
+  if (unitCost !== null) updateMenuPrices(req.user.name);
   res.redirect('/Inventory.html');
 });
 
@@ -979,8 +1086,11 @@ app.post('/inventory/unit', requireOwner, (req, res) => {
 
   const item = db.prepare('SELECT name, unit AS previousUnit FROM inventory WHERE id = ?').get(id);
   if (item) {
-    db.prepare('UPDATE inventory SET unit = ? WHERE id = ?').run(unit, id);
+    const unitChanged = normalizeUnit(unit) !== normalizeUnit(item.previousUnit);
+    db.prepare('UPDATE inventory SET unit = ?, unit_cost = CASE WHEN ? THEN NULL ELSE unit_cost END WHERE id = ?')
+      .run(unit, unitChanged ? 1 : 0, id);
     addLog(req.user.name, `Updated unit for "${item.name}" from ${item.previousUnit} to ${unit}`);
+    if (unitChanged) addLog(req.user.name, `Cleared unit cost for "${item.name}" because its unit changed`);
   }
   res.redirect('/Inventory.html');
 });
@@ -989,6 +1099,8 @@ app.post('/inventory/delete', requireOwner, (req, res) => {
   const id = req.body.id;
   const item = db.prepare('SELECT name FROM inventory WHERE id = ?').get(id);
   if (item) {
+    const recipeUse = db.prepare('SELECT 1 FROM recipes WHERE inventory_id = ? LIMIT 1').get(id);
+    if (recipeUse) return res.redirect('/Inventory.html?error=inuse');
     db.prepare('DELETE FROM inventory WHERE id = ?').run(id);
     addLog(req.user.name, `Removed inventory item "${item.name}"`);
   }
@@ -998,18 +1110,33 @@ app.post('/inventory/delete', requireOwner, (req, res) => {
 app.post('/inventory/restock', requireOwner, (req, res) => {
   const id = req.body.id;
   const qty = Number(req.body.qty);
-  const expiresOn = String(req.body.expiresOn || '').trim();
-  const item = db.prepare('SELECT name, unit FROM inventory WHERE id = ?').get(id);
-  if (!Number.isFinite(qty) || qty <= 0 || (expiresOn && !isValidDateKey(expiresOn))) {
-    return res.redirect(`/Inventory.html?error=${expiresOn && !isValidDateKey(expiresOn) ? 'expiry' : 'stock'}`);
+  const purchaseCostValue = String(req.body.purchaseCost ?? '').trim();
+  const purchaseCost = purchaseCostValue === '' ? null : Number(purchaseCostValue);
+  const item = db.prepare('SELECT name, unit, stock, unit_cost AS unitCost FROM inventory WHERE id = ?').get(id);
+  const expiresOn = item && item.name.toLowerCase() === 'cups' ? '' : String(req.body.expiresOn || '').trim();
+  if (!Number.isFinite(qty) || qty <= 0) return res.redirect('/Inventory.html?error=stock');
+  if (purchaseCostValue === '' || !Number.isFinite(purchaseCost) || purchaseCost < 0) {
+    return res.redirect('/Inventory.html?error=cost');
   }
+  if (expiresOn && !isValidDateKey(expiresOn)) return res.redirect('/Inventory.html?error=expiry');
   if (item) {
+    let unitCost = item.unitCost;
+    if (purchaseCost !== null) {
+      unitCost = item.unitCost === null
+        ? purchaseCost / qty
+        : (item.stock * item.unitCost + purchaseCost) / (item.stock + qty);
+    }
     db.prepare(`
       UPDATE inventory
-      SET stock = stock + ?, expires_on = CASE WHEN ? = '' THEN expires_on ELSE ? END
+      SET stock = stock + ?, expires_on = CASE WHEN ? = '' THEN expires_on ELSE ? END,
+          unit_cost = ?
       WHERE id = ?
-    `).run(qty, expiresOn, expiresOn, id);
+    `).run(qty, expiresOn, expiresOn, unitCost, id);
     addLog(req.user.name, `Restocked ${qty} ${item.unit} of ${item.name}`);
+    if (purchaseCost !== null) {
+      addLog(req.user.name, `Updated weighted-average unit cost for "${item.name}" to ₱ ${unitCost} per ${item.unit}`);
+      updateMenuPrices(req.user.name);
+    }
   }
   res.redirect('/Inventory.html');
 });
@@ -1020,8 +1147,9 @@ app.post('/inventory/expiry', requireOwner, (req, res) => {
   if (expiresOn && !isValidDateKey(expiresOn)) return res.redirect('/Inventory.html?error=expiry');
   const item = db.prepare('SELECT name FROM inventory WHERE id = ?').get(id);
   if (item) {
-    db.prepare('UPDATE inventory SET expires_on = ? WHERE id = ?').run(expiresOn || null, id);
-    addLog(req.user.name, `${expiresOn ? 'Updated' : 'Cleared'} expiration date for "${item.name}"`);
+    const dateToSave = item.name.toLowerCase() === 'cups' ? null : (expiresOn || null);
+    db.prepare('UPDATE inventory SET expires_on = ? WHERE id = ?').run(dateToSave, id);
+    addLog(req.user.name, `${dateToSave ? 'Updated' : 'Cleared'} expiration date for "${item.name}"`);
   }
   res.redirect('/Inventory.html');
 });
@@ -1042,22 +1170,20 @@ app.post('/inventory/waste', (req, res) => {
 app.post('/menu/update', requireOwner, (req, res) => {
   const id = req.body.id;
   const name = (req.body.name || '').trim();
-  const price = parseInt(req.body.price, 10);
-  if (!name || !price || price <= 0) return res.redirect('/Prices.html?error=bad');
+  if (!name) return res.redirect('/Prices.html?error=bad');
   const existing = db.prepare('SELECT id FROM menu WHERE id = ?').get(id);
   if (!existing) return res.redirect('/Prices.html?error=missing');
-  db.prepare('UPDATE menu SET name = ?, price = ? WHERE id = ?').run(name, price, id);
-  addLog(req.user.name, `Updated menu item "${name}" to ₱ ${price}`);
+  db.prepare('UPDATE menu SET name = ? WHERE id = ?').run(name, id);
+  addLog(req.user.name, `Updated menu item name to "${name}"`);
   res.redirect('/Prices.html');
 });
 
 app.post('/menu/add', requireOwner, (req, res) => {
   const name = (req.body.name || '').trim();
-  const price = parseInt(req.body.price, 10);
   const isCup = req.body.isCup === '0' ? 0 : 1;
-  if (!name || !price || price <= 0) return res.redirect('/Prices.html?error=bad');
+  if (!name) return res.redirect('/Prices.html?error=bad');
   const id = 'it-' + Date.now();
-  db.prepare('INSERT INTO menu (id, name, price, is_cup) VALUES (?, ?, ?, ?)').run(id, name, price, isCup);
+  db.prepare('INSERT INTO menu (id, name, price, is_cup) VALUES (?, ?, ?, ?)').run(id, name, 1, isCup);
   if (isCup) {
     const cups = db.prepare("SELECT id, unit FROM inventory WHERE LOWER(name) = 'cups'").get();
     if (cups) {
@@ -1067,7 +1193,8 @@ app.post('/menu/add', requireOwner, (req, res) => {
       `).run(id, cups.id, cups.unit);
     }
   }
-  addLog(req.user.name, `Added menu item "${name}" at ₱ ${price}${isCup ? '' : ' (not a cup)'}`);
+  addLog(req.user.name, `Added menu item "${name}"${isCup ? '' : ' (not a cup)'}`);
+  updateMenuPrices(req.user.name);
   res.redirect('/Prices.html');
 });
 
@@ -1091,6 +1218,7 @@ app.post('/menu/recipe', requireOwner, (req, res) => {
       unit = excluded.unit
   `).run(menuId, inventoryId, quantity, unit);
   addLog(req.user.name, `Set ${quantity} ${unit} of ${ingredient.name} per ${menuItem.name}`);
+  updateMenuPrices(req.user.name);
   res.redirect(`/Prices.html?recipe_saved=1&menuId=${encodeURIComponent(menuId)}`);
 });
 
@@ -1107,6 +1235,7 @@ app.post('/menu/recipe/delete', requireOwner, (req, res) => {
   if (recipe) {
     db.prepare('DELETE FROM recipes WHERE menu_id = ? AND inventory_id = ?').run(menuId, inventoryId);
     addLog(req.user.name, `Removed ${recipe.ingredientName} from ${recipe.menuName} recipe`);
+    updateMenuPrices(req.user.name);
   }
   res.redirect(`/Prices.html?recipe_saved=1&menuId=${encodeURIComponent(menuId)}`);
 });

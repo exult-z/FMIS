@@ -58,7 +58,7 @@
     </form>
     <div class="scroll" style="margin-top:14px">
       <table>
-        <thead><tr><th>Barista</th><th>Username</th></tr></thead>
+        <thead><tr><th>Barista</th><th>Username</th><th>Account</th></tr></thead>
         <tbody id="barista-users"></tbody>
       </table>
     </div>
@@ -71,13 +71,15 @@ const messages = {
   must_change: 'This is your temporary password. Change it before continuing.',
   password_changed: 'Your password has been updated.',
   registered: 'Barista account registered. Share the temporary password shown above with the new barista.',
+  removed: 'Barista account removed. Their active sessions have been revoked.',
   wrong_current_password: 'The current password is incorrect.',
   password_too_short: 'The new password must be at least 8 characters.',
   password_mismatch: 'The new passwords do not match.',
   invalid_barista: 'Enter a valid barista name and username (3–30 letters, numbers, dots, underscores, or hyphens).',
-  duplicate_username: 'That username is already registered.'
+  duplicate_username: 'That username is already registered.',
+  barista_missing: 'That barista account could not be found.'
 };
-const messageKey = params.get('must_change') === '1' ? 'must_change' : params.get('error') || params.get('password_changed') ? (params.get('error') || 'password_changed') : params.get('registered') ? 'registered' : '';
+const messageKey = params.get('must_change') === '1' ? 'must_change' : params.get('error') || params.get('password_changed') ? (params.get('error') || 'password_changed') : params.get('removed') ? 'removed' : params.get('registered') ? 'registered' : '';
 if (messages[messageKey]) {
   const alert = document.getElementById('settings-message');
   alert.textContent = messages[messageKey];
@@ -93,8 +95,8 @@ if (messages[messageKey]) {
   const { users } = await response.json();
   const tbody = document.getElementById('barista-users');
   tbody.innerHTML = users.length
-    ? users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.username)}</td></tr>`).join('')
-    : '<tr><td colspan="2" class="sub">No barista accounts registered.</td></tr>';
+    ? users.map(user => `<tr data-username="${escapeHtml(user.username)}"><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.username)}</td><td><form method="post" action="/remove-barista"><input type="hidden" name="username" value="${escapeHtml(user.username)}"><button type="submit" class="btn sm" aria-label="Remove barista ${escapeHtml(user.username)}">Remove</button></form></td></tr>`).join('')
+    : '<tr><td colspan="3" class="sub">No barista accounts registered.</td></tr>';
 })();
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({

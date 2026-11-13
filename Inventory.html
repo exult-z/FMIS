@@ -11,15 +11,15 @@
 <main>
 <p class="alert" id="inventory-message" role="alert" hidden></p>
 <div class="card"><h2>Stock &amp; supplies</h2>
-<p class="sub">You can edit an item's unit here. Changing the unit does not convert stock or recipe quantities.</p>
+<p class="sub">Critical stock is 50 units or less (orange); low stock is above 50 and up to 100 (yellow). Expired items and items expiring within 30 days are red. Changing a unit does not convert stock or recipe quantities and clears its saved unit cost.</p>
 <table>
-<thead><tr><th>Item</th><th>Stock</th><th>Unit</th><th>Status</th><th>Expiration date</th><th></th></tr></thead>
+<thead><tr><th>Item</th><th>Stock</th><th>Unit</th><th>Cost per unit</th><th>Status</th><th>Expiration date</th><th></th></tr></thead>
 <tbody id="inventory-table-body"></tbody>
 </table></div>
 
 <div class="card"><h2>Add custom stock</h2>
 <form class="form form-grid inventory-add-form" method="post" action="/inventory/add">
-<label class="field">Item name<input type="text" name="name" placeholder="e.g. Oat milk" required></label>
+<label class="field">Item name<input type="text" name="name" id="inventory-name" placeholder="e.g. Oat milk" required></label>
 <label class="field">Unit<select name="unit" required>
 <option value="units" selected>units</option>
 <option value="mL">mL</option>
@@ -36,15 +36,17 @@
 </select></label>
 <label class="field" id="custom-unit-field" hidden>Custom unit<input type="text" name="customUnit" id="custom-unit-input" placeholder="e.g. pumps" maxlength="30"></label>
 <label class="field">Starting stock<input type="number" name="stock" min="0" step="any" value="0"></label>
-<label class="field">Expiration date (optional)<input type="date" name="expiresOn"></label>
+<label class="field">Total purchase cost (₱)<input type="number" name="purchaseCost" min="0" step="0.01"></label>
+<label class="field" id="add-expiry-field">Expiration date (optional)<input type="date" name="expiresOn"></label>
 <button type="submit" class="btn pri">Add item</button>
 </form></div>
 
 <div class="card"><h2>Restock inventory</h2>
-<form class="form" method="post" action="/inventory/restock">
+<form class="form form-grid inventory-restock-form" method="post" action="/inventory/restock">
 <label class="field">Item<select name="id" id="restock-select"></select></label>
 <label class="field">Quantity to add<input type="number" name="qty" value="10" min="0.000001" step="any" required></label>
-<label class="field">Update tracked expiry (optional)<input type="date" name="expiresOn"></label>
+<label class="field">Total purchase cost (₱)<input type="number" name="purchaseCost" min="0" step="0.01" required><small>Updates the weighted-average cost per unit.</small></label>
+<label class="field" id="restock-expiry-field">Update tracked expiry (optional)<input type="date" name="expiresOn"></label>
 <button type="submit" class="btn pri">Confirm restock</button>
 </form></div>
 
@@ -75,33 +77,41 @@ updateCustomUnitField();
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   const inv = db.inventory || [];
   const tbody = document.getElementById('inventory-table-body');
-  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="6" class="sub">No inventory records.</td></tr>';
+  tbody.innerHTML = inv.length ? '' : '<tr><td colspan="7" class="sub">No inventory records.</td></tr>';
   for (const it of inv) {
-    const isLow = it.stock < 15;
+    const isCups = it.name.toLowerCase() === 'cups';
+    const stockStatus = it.stockStatus || 'ok';
+    const statusLabel = stockStatus === 'critical' ? 'Critical' : stockStatus === 'low' ? 'Low stock' : 'OK';
+    const expiryLabel = it.expirationStatus === 'expired' ? '<span class="pill expired">Expired</span>'
+      : it.expirationStatus === 'expiring' ? '<span class="pill expiring">Expiring soon</span>' : '';
     tbody.insertAdjacentHTML('beforeend', `
       <tr><td><b>${escapeHtml(it.name)}</b></td><td>${it.stock}</td>
       <td><form class="form" method="post" action="/inventory/unit">
       <input type="hidden" name="id" value="${escapeHtml(it.id)}">
       <input type="text" name="unit" value="${escapeHtml(it.unit || '')}" maxlength="30" required aria-label="Unit for ${escapeHtml(it.name)}">
       <button class="btn sm" type="submit">Save unit</button></form></td>
-      <td><span class="pill ${isLow ? 'low' : 'ok'}">${isLow ? 'Low' : 'OK'}</span></td>
-      <td><form class="form" method="post" action="/inventory/expiry">
+      <td>${it.unitCost === null ? '<span class="sub">Not set</span>' : `₱ ${Number(it.unitCost).toFixed(2)} / ${escapeHtml(it.unit)}`}</td>
+      <td><span class="pill ${stockStatus}">${statusLabel}</span> ${expiryLabel}</td>
+      <td>${isCups ? '<span class="sub">Not applicable</span>' : `<form class="form" method="post" action="/inventory/expiry">
       <input type="hidden" name="id" value="${escapeHtml(it.id)}">
       <input type="date" name="expiresOn" value="${escapeHtml(it.expiresOn || '')}" aria-label="Expiration date for ${escapeHtml(it.name)}">
-      <button class="btn sm" type="submit">Save date</button></form></td>
+      <button class="btn sm" type="submit">Save date</button></form>`}</td>
       <td><form method="post" action="/inventory/delete">
       <input type="hidden" name="id" value="${escapeHtml(it.id)}"><button class="btn sm" type="submit">Remove</button></form></td></tr>`);
   }
-  const opts = inv.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
+  const opts = inv.map(it => `<option value="${escapeHtml(it.id)}" data-name="${escapeHtml(it.name)}">${escapeHtml(it.name)}</option>`).join('');
   document.getElementById('restock-select').innerHTML = opts;
   document.getElementById('waste-select').innerHTML = opts;
+  updateRestockExpiryField();
 })();
 const inventoryMessages = {
   expiry: 'Enter a valid expiration date.',
   stock: 'Enter a valid stock quantity.',
   name: 'Enter an item name.',
   unit: 'Choose or enter a unit.',
-  dupe: 'An inventory item with that name already exists.'
+  dupe: 'An inventory item with that name already exists.',
+  cost: 'Enter a valid purchase cost. Restocking requires a cost; starting stock must be positive when its cost is set.',
+  inuse: 'This ingredient is used in a menu recipe. Remove it from each recipe before deleting it.'
 };
 const inventoryError = new URLSearchParams(location.search).get('error');
 if (inventoryMessages[inventoryError]) {
@@ -109,6 +119,23 @@ if (inventoryMessages[inventoryError]) {
   message.textContent = inventoryMessages[inventoryError];
   message.hidden = false;
 }
+const updateAddExpiryField = () => {
+  const isCups = document.getElementById('inventory-name').value.trim().toLowerCase() === 'cups';
+  const field = document.getElementById('add-expiry-field');
+  field.hidden = isCups;
+  if (isCups) field.querySelector('input').value = '';
+};
+document.getElementById('inventory-name').addEventListener('input', updateAddExpiryField);
+updateAddExpiryField();
+function updateRestockExpiryField() {
+  const select = document.getElementById('restock-select');
+  const option = select.selectedOptions[0];
+  const field = document.getElementById('restock-expiry-field');
+  const isCups = option && option.dataset.name.toLowerCase() === 'cups';
+  field.hidden = Boolean(isCups);
+  if (isCups) field.querySelector('input').value = '';
+}
+document.getElementById('restock-select').addEventListener('change', updateRestockExpiryField);
 </script>
 <script src="user.js"></script>
 </body></html>

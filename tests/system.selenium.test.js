@@ -15,6 +15,27 @@ let driver;
 let baseUrl;
 let testDirectory;
 
+async function postForm(pathname, values) {
+  const result = await driver.executeAsyncScript((url, fields, done) => {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields)
+    }).then(response => done({ status: response.status, url: response.url }))
+      .catch(error => done({ error: error.message }));
+  }, pathname, values);
+  assert.equal(result.error, undefined, result.error);
+  assert.equal(result.status, 200);
+  return result;
+}
+
+async function getDatabase() {
+  return driver.executeAsyncScript(done => {
+    fetch('/api/db').then(response => response.json()).then(done)
+      .catch(error => done({ error: error.message }));
+  });
+}
+
 async function findAvailablePort() {
   const server = net.createServer();
   server.listen(0, '127.0.0.1');
@@ -113,4 +134,131 @@ test('owner can sign in, record a sale, view it in sales, and sign out', async (
   await driver.findElement(By.linkText('Log out')).click();
   await driver.wait(until.urlContains('/Login.html'), 5000);
   assert.match(await driver.getTitle(), /Login/);
+});
+
+test('owner can view wastage type in audit log and remove a barista', async () => {
+  await driver.get(`${baseUrl}/Login.html`);
+  await driver.findElement(By.name('password')).sendKeys('1234');
+  await driver.findElement(By.css('button[type="submit"]')).click();
+  await driver.wait(until.urlContains('/Index.html'), 5000);
+
+  await driver.get(`${baseUrl}/Inventory.html`);
+  await driver.wait(until.elementLocated(By.css('#waste-select option[value="fresh-milk"]')), 5000);
+  await driver.findElement(By.id('waste-select')).sendKeys('Fresh milk');
+  await driver.findElement(By.name('reason')).sendKeys('Expired');
+  const wastageForm = await driver.findElement(By.css('form[action="/inventory/waste"]'));
+  await wastageForm.findElement(By.css('button[type="submit"]')).click();
+  await driver.wait(until.stalenessOf(wastageForm), 5000);
+
+  await driver.get(`${baseUrl}/Logs.html`);
+  const wastageGroup = await driver.wait(
+    until.elementLocated(By.css('summary[aria-label^="Wastage logged"]')),
+    5000
+  );
+  await wastageGroup.click();
+  const wastageRow = wastageGroup.findElement(By.xpath('..')).findElement(By.css('table tbody tr'));
+  const wastageCells = await wastageRow.findElements(By.css('td'));
+  assert.equal(await wastageCells[2].getText(), 'Expired');
+  assert.doesNotMatch(await wastageCells[3].getText(), /\(Expired\)$/);
+
+  await driver.get(`${baseUrl}/Settings.html`);
+  await driver.findElement(By.css('form[action="/register-barista"] input[name="name"]')).sendKeys('Audit Test Barista');
+  await driver.findElement(By.css('form[action="/register-barista"] input[name="username"]')).sendKeys('auditbarista');
+  await driver.findElement(By.css('form[action="/register-barista"] button[type="submit"]')).click();
+  const baristaRowSelector = '#barista-users tr[data-username="auditbarista"]';
+  await driver.wait(until.elementLocated(By.css(baristaRowSelector)), 5000);
+  await driver.findElement(By.css(`${baristaRowSelector} button[type="submit"]`)).click();
+  await driver.wait(until.elementTextContains(
+    driver.findElement(By.id('settings-message')),
+    'Barista account removed.'
+  ), 5000);
+  await driver.wait(async () => !(await driver.findElements(By.css(baristaRowSelector))).length, 5000);
+
+  const users = await driver.executeAsyncScript(async done => {
+    const response = await fetch('/api/users');
+    done(await response.json());
+  });
+  assert.deepEqual(users.users, []);
+});
+
+test('inventory costs update menu prices and unavailable drinks are disabled', async () => {
+  await driver.get(`${baseUrl}/logout`);
+  await driver.get(`${baseUrl}/Login.html`);
+  await driver.findElement(By.name('password')).sendKeys('1234');
+  await driver.findElement(By.css('button[type="submit"]')).click();
+  await driver.wait(until.urlContains('/Index.html'), 5000);
+
+  await driver.get(`${baseUrl}/Inventory.html`);
+  await driver.wait(until.elementLocated(By.id('inventory-table-body')), 5000);
+  let db = await getDatabase();
+  const initialMilkStock = db.inventory.find(item => item.id === 'fresh-milk').stock;
+
+  const missingCostResult = await postForm('/inventory/restock', {
+    id: 'fresh-milk',
+    qty: '10'
+  });
+  assert.match(missingCostResult.url, /Inventory\.html\?error=cost$/);
+  db = await getDatabase();
+  assert.equal(db.inventory.find(item => item.id === 'fresh-milk').stock, initialMilkStock);
+
+  await postForm('/inventory/restock', {
+    id: 'cups',
+    qty: '10',
+    purchaseCost: '4',
+    expiresOn: '2020-01-01'
+  });
+  await postForm('/inventory/expiry', { id: 'cups', expiresOn: '2020-01-01' });
+  await postForm('/inventory/restock', { id: 'fresh-milk', qty: '10', purchaseCost: '100' });
+  await postForm('/inventory/restock', { id: 'fresh-milk', qty: '10', purchaseCost: '200' });
+
+  const expiringOn = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+  await postForm('/inventory/expiry', { id: 'fresh-milk', expiresOn: expiringOn });
+  await postForm('/menu/recipe', {
+    menuId: 'ml',
+    inventoryId: 'fresh-milk',
+    quantity: '0.25',
+    unit: 'L'
+  });
+
+  db = await getDatabase();
+  assert.equal(db.inventory.find(item => item.id === 'cups').expiresOn, null);
+  assert.equal(db.inventory.find(item => item.id === 'cups').expirationStatus, 'none');
+  assert.equal(db.inventory.find(item => item.id === 'fresh-milk').expirationStatus, 'expiring');
+  assert.equal(db.inventory.find(item => item.id === 'matcha-powder').stockStatus, 'critical');
+  assert.equal(db.menu.ml.priceAutoCalculated, true);
+
+  const expectedMilkUnitCost = ((initialMilkStock + 10) * 10 + 200) / (initialMilkStock + 20);
+  const expectedIngredientCost = 0.4 + expectedMilkUnitCost * 0.25;
+  assert.ok(Math.abs(db.inventory.find(item => item.id === 'fresh-milk').unitCost - expectedMilkUnitCost) < 1e-9);
+  assert.equal(db.menu.ml.price, Math.ceil(expectedIngredientCost / 0.85 - 1e-9));
+  await driver.get(`${baseUrl}/Prices.html`);
+  await driver.wait(until.elementTextContains(
+    driver.findElement(By.css('#prices-body tr[data-menu-id="ml"] td:nth-child(2)')),
+    'Auto'
+  ), 5000);
+
+  const cupStock = db.inventory.find(item => item.id === 'cups').stock;
+  await postForm('/inventory/waste', {
+    id: 'cups',
+    qty: String(cupStock - 75),
+    reason: 'Other'
+  });
+  await postForm('/inventory/waste', {
+    id: 'fresh-milk',
+    qty: String(db.inventory.find(item => item.id === 'fresh-milk').stock),
+    reason: 'Other'
+  });
+
+  db = await getDatabase();
+  assert.equal(db.inventory.find(item => item.id === 'cups').stockStatus, 'low');
+  assert.equal(db.menu.ml.available, false);
+  assert.deepEqual(db.menu.ml.unavailableIngredients, ['Fresh milk']);
+
+  await driver.get(`${baseUrl}/Index.html`);
+  const matchaLatte = await driver.wait(until.elementLocated(By.css('#pos-menu [data-id="ml"]')), 5000);
+  assert.equal(await matchaLatte.isEnabled(), false);
+  assert.match(await matchaLatte.getAttribute('class'), /unavailable/);
+
+  await driver.get(`${baseUrl}/Forecast.html`);
+  assert.equal(await driver.findElements(By.xpath("//th[normalize-space()='Month stock runs out']")).then(rows => rows.length), 0);
 });

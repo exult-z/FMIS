@@ -26,6 +26,7 @@ const logCategories = [
   { title: 'Restocked', matches: action => /^Restocked\b/i.test(action) },
   { title: 'Set ingredient recipe', matches: action => /^Set .+ per .+/i.test(action) },
   { title: 'Barista account registered', matches: action => /^Registered barista account\b/i.test(action) },
+  { title: 'Barista account removed', matches: action => /^Removed barista account\b/i.test(action) },
   { title: 'Password changed', matches: action => /^Changed account password\b/i.test(action) },
   { title: 'Inventory unit updated', matches: action => /^Updated unit for\b/i.test(action) },
   { title: 'Expiration date updated', matches: action => /^Updated expiration date\b/i.test(action) },
@@ -54,6 +55,8 @@ const logCategories = [
           ? ['When', 'User', 'Payment method', 'Customer total', 'Action']
           : title === 'Added ingredient'
             ? ['When', 'User', 'Ingredient', 'Quantity', 'Unit']
+            : title === 'Wastage logged'
+              ? ['When', 'User', 'Wastage type', 'Details']
             : ['When', 'User', 'Action']).map(heading => `<th>${heading}</th>`).join('')}</tr></thead>
         <tbody>${entries.map(log => {
           if (title === 'Order') {
@@ -68,6 +71,11 @@ const logCategories = [
           if (title === 'Added ingredient') {
             const ingredientMatch = log.action.match(/^Added inventory item "(.+)" \((-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s+(.+)\)$/i);
             return `<tr><td>${escapeHtml(log.when)}</td><td>${escapeHtml(log.user)}</td><td>${escapeHtml(ingredientMatch ? ingredientMatch[1] : log.action)}</td><td>${escapeHtml(ingredientMatch ? ingredientMatch[2] : '—')}</td><td>${escapeHtml(ingredientMatch ? ingredientMatch[3] : '—')}</td></tr>`;
+          }
+          if (title === 'Wastage logged') {
+            const wastageMatch = log.action.match(/^Logged wastage: (.*) \((.*)\)$/);
+            const details = wastageMatch ? log.action.slice(0, log.action.lastIndexOf(' (')) : log.action;
+            return `<tr><td>${escapeHtml(log.when)}</td><td>${escapeHtml(log.user)}</td><td>${escapeHtml(wastageMatch ? wastageMatch[2] : '—')}</td><td>${escapeHtml(details)}</td></tr>`;
           }
           return `<tr><td>${escapeHtml(log.when)}</td><td>${escapeHtml(log.user)}</td><td>${escapeHtml(log.action)}</td></tr>`;
         }).join('')}</tbody>

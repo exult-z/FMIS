@@ -38,9 +38,39 @@
 </main>
 <script>
 let cart = {};
+let posMenu = {};
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
+function updateMenuAvailability() {
+  const requiredByIngredient = new Map();
+  for (const [menuId, item] of Object.entries(cart)) {
+    for (const ingredient of posMenu[menuId]?.ingredients || []) {
+      const current = requiredByIngredient.get(ingredient.inventoryId) || 0;
+      requiredByIngredient.set(
+        ingredient.inventoryId,
+        Math.round((current * 1e6 + ingredient.requiredQuantity * item.qty * 1e6)) / 1e6
+      );
+    }
+  }
+
+  document.querySelectorAll('#pos-menu .chip').forEach(button => {
+    const item = posMenu[button.dataset.id];
+    const shortages = [...(item.unavailableIngredients || [])];
+    for (const ingredient of item.ingredients || []) {
+      const current = requiredByIngredient.get(ingredient.inventoryId) || 0;
+      const required = Math.round((current * 1e6 + ingredient.requiredQuantity * 1e6)) / 1e6;
+      if (required > ingredient.stock) shortages.push(ingredient.ingredientName);
+    }
+    const unavailableIngredients = [...new Set(shortages)];
+    button.disabled = unavailableIngredients.length > 0;
+    button.classList.toggle('unavailable', button.disabled);
+    button.setAttribute('aria-disabled', String(button.disabled));
+    button.title = button.disabled ? `Insufficient stock: ${unavailableIngredients.join(', ')}` : '';
+    button.querySelector('.availability-message').textContent =
+      button.disabled ? `Unavailable: ${unavailableIngredients.join(', ')}` : '';
+  });
+}
 function setPayment(method) {
   document.getElementById('hidden-method-input').value = method;
   document.getElementById('btn-cash').classList.toggle('on', method === 'Cash');
@@ -82,6 +112,7 @@ function renderCart() {
     Object.entries(cart).map(([id, item]) => ({ id, qty: item.qty }))
   );
   updateCashChange();
+  updateMenuAvailability();
 }
 function removeItem(id) {
   if (!cart[id]) return;
@@ -90,12 +121,13 @@ function removeItem(id) {
 }
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
-  const menu = db.menu || {};
+  posMenu = db.menu || {};
   const wrap = document.getElementById('pos-menu');
-  wrap.innerHTML = Object.entries(menu).map(([id, it]) =>
+  wrap.innerHTML = Object.entries(posMenu).map(([id, it]) =>
     `<button type="button" class="chip" data-id="${escapeHtml(id)}" data-name="${escapeHtml(it.name)}" data-price="${it.price}">
-       <span>${escapeHtml(it.name)}<small>₱ ${it.price}</small></span></button>`).join('');
+       <span>${escapeHtml(it.name)}<small>₱ ${it.price}</small><small class="availability-message"></small></span></button>`).join('');
   wrap.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    if (b.disabled) return;
     const id = b.dataset.id, name = b.dataset.name, price = +b.dataset.price;
     if (!cart[id]) cart[id] = { name, price, qty: 0 };
     cart[id].qty++; renderCart();

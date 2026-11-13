@@ -27,8 +27,8 @@
     <div class="dashboard-stats">
       <div class="stat dk"><span>Sales today</span><span class="num" id="dashboard-sales">₱ 0</span></div>
       <div class="stat"><span>Orders today</span><span class="num" id="dashboard-orders">0</span></div>
-      <div class="stat"><span>Low-stock items</span><span class="num" id="dashboard-low-stock">0</span></div>
-      <div class="stat"><span>Expired / expiring</span><span class="num" id="dashboard-expiring">0</span></div>
+      <div class="stat"><span>Low / critical stock</span><span class="num" id="dashboard-low-stock">0</span></div>
+      <div class="stat"><span>Expired / expiring (30 days)</span><span class="num" id="dashboard-expiring">0</span></div>
     </div>
     <p class="sub" id="dashboard-inventory-summary"></p>
   </div>
@@ -83,7 +83,7 @@ const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).pad
     }
     const [db, report] = await Promise.all([dbResponse.json(), reportResponse.json()]);
     const inventory = db.inventory || [];
-    const lowStock = inventory.filter(item => Number(item.stock) < 15);
+    const lowStock = inventory.filter(item => item.stockStatus === 'low' || item.stockStatus === 'critical');
     const expiring = db.expiryAlerts || [];
     const menuCount = Object.keys(db.menu || {}).length;
 
@@ -128,20 +128,25 @@ const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).pad
       ).join('')
       : '<p class="sub">No products sold today yet.</p>';
 
-    const expiringById = new Map(expiring.map(item => [item.id, item]));
     const inventoryAlerts = inventory.map(item => {
       const notices = [];
-      if (Number(item.stock) < 15) notices.push(`${item.stock} ${item.unit} remaining (low stock)`);
-      const expiry = expiringById.get(item.id);
-      if (expiry) {
-        const expired = expiry.expiresOn < report.date;
-        notices.push(`${expired ? 'expired' : 'expires'} on ${expiry.expiresOn}`);
+      if (item.stockStatus === 'critical') {
+        notices.push('<span class="pill critical">Critical stock</span>');
+      } else if (item.stockStatus === 'low') {
+        notices.push('<span class="pill low">Low stock</span>');
       }
-      return notices.length ? `${item.name}: ${notices.join('; ')}` : null;
+      if (item.expirationStatus === 'expired') {
+        notices.push(`<span class="pill expired">Expired ${escapeHtml(item.expiresOn)}</span>`);
+      } else if (item.expirationStatus === 'expiring') {
+        notices.push(`<span class="pill expiring">Expires ${escapeHtml(item.expiresOn)}</span>`);
+      }
+      return notices.length
+        ? `<li><b>${escapeHtml(item.name)}</b>: ${notices.join(' ')}</li>`
+        : null;
     }).filter(Boolean);
     document.getElementById('dashboard-inventory-alerts').innerHTML = inventoryAlerts.length
-      ? `<ul class="dashboard-alert-list">${inventoryAlerts.map(alert => `<li>${escapeHtml(alert)}</li>`).join('')}</ul>`
-      : '<p class="sub">No low-stock or upcoming-expiration alerts.</p>';
+      ? `<ul class="dashboard-alert-list">${inventoryAlerts.join('')}</ul>`
+      : '<p class="sub">No stock or expiration alerts.</p>';
 
     const recentOrders = (db.sales || []).slice(0, 5);
     document.getElementById('dashboard-recent-orders').innerHTML = recentOrders.length
