@@ -30,7 +30,7 @@ function renderInventoryForecast(forecast) {
       item.name,
       `${formatQuantity(item.stock)} ${item.unit || ''}`.trim(),
       item.averageDailyUse === null ? '—' : `${formatQuantity(item.averageDailyUse, item.name.toLowerCase() === 'cups' ? 0 : 2)} ${item.unit || ''}`.trim(),
-      item.status === 'out' ? 'Out of stock' : item.status === 'forecast' ? `Around ${formatForecastDate(item.runOutDate)}` : ({
+      item.status === 'out' ? 'Out of stock' : item.status === 'forecast' ? formatForecastDate(item.runOutDate) : ({
         'no-history': 'Not enough tracked sales',
         'unit-mismatch': 'Cannot estimate: units changed',
         'no-demand': 'No recorded use'
