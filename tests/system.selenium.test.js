@@ -255,6 +255,12 @@ test('inventory costs update menu prices and unavailable drinks are disabled', a
   assert.deepEqual(db.menu.ml.unavailableIngredients, ['Fresh milk']);
 
   await driver.get(`${baseUrl}/Index.html`);
+  const inventoryNotice = await driver.wait(
+    until.elementLocated(By.css('.system-notice')),
+    5000
+  );
+  assert.match(await inventoryNotice.getText(), /Cups \(75 pcs\) is low in stock\./);
+
   const matchaLatte = await driver.wait(until.elementLocated(By.css('#pos-menu [data-id="ml"]')), 5000);
   assert.equal(await matchaLatte.isEnabled(), false);
   assert.match(await matchaLatte.getAttribute('class'), /unavailable/);
