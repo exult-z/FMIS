@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
-const { mkdtemp, rm } = require('node:fs/promises');
+const { mkdtemp, rm, writeFile } = require('node:fs/promises');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
@@ -70,6 +70,7 @@ before(async () => {
     env: {
       ...process.env,
       FMIS_DB_FILE: path.join(testDirectory, 'test.db'),
+      FMIS_PRODUCT_IMAGES_DIR: path.join(testDirectory, 'product-images'),
       PORT: String(port),
       NODE_ENV: 'test'
     },
@@ -95,6 +96,7 @@ test('owner can sign in, record a sale, view it in sales, and sign out', async (
   await driver.get(`${baseUrl}/Login.html`);
   await driver.findElement(By.name('password')).sendKeys('incorrect');
   await driver.findElement(By.css('button[type="submit"]')).click();
+  await driver.wait(until.urlContains('error=wrong_password'), 5000);
   await driver.wait(until.elementTextContains(
     driver.findElement(By.id('login-error')),
     'Incorrect username or password.'
@@ -104,11 +106,64 @@ test('owner can sign in, record a sale, view it in sales, and sign out', async (
   await driver.findElement(By.name('password')).sendKeys('1234');
   await driver.findElement(By.css('button[type="submit"]')).click();
   await driver.wait(until.urlContains('/Index.html'), 5000);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
 
-  const menuItem = await driver.wait(
+  let menuItem = await driver.wait(
     until.elementLocated(By.css('#pos-menu [data-id="ml"]')),
     5000
   );
+  const matchaPhoto = await menuItem.findElement(By.css('.product-photo'));
+  assert.match(await matchaPhoto.getAttribute('src'), /product-images\/matcha-latte\.jpg$/);
+  await driver.wait(
+    () => driver.executeScript('return arguments[0].complete && arguments[0].naturalWidth > 0;', matchaPhoto),
+    5000
+  );
+  await driver.wait(until.elementIsDisabled(menuItem), 5000);
+  assert.match(await menuItem.findElement(By.css('.availability-message')).getText(), /Add ingredients/);
+  const salesBeforeRejectedOrder = (await getDatabase()).sales.length;
+  const rejectedOrder = await postForm('/record-sale', {
+    orderData: JSON.stringify([{ id: 'ml', qty: 1 }]),
+    method: 'Cash',
+    cashReceived: '100'
+  });
+  assert.match(rejectedOrder.url, /Index\.html\?error=recipe&item=Matcha%20Latte$/);
+  assert.equal((await getDatabase()).sales.length, salesBeforeRejectedOrder);
+
+  await postForm('/menu/recipe', {
+    menuId: 'ml',
+    inventoryId: 'matcha-powder',
+    quantity: '1',
+    unit: 'g'
+  });
+  await postForm('/menu/recipe', {
+    menuId: 'addon',
+    inventoryId: 'ube-powder',
+    quantity: '1',
+    unit: 'g'
+  });
+  await driver.navigate().refresh();
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
+  menuItem = await driver.wait(
+    until.elementLocated(By.css('#pos-menu [data-id="ml"]')),
+    5000
+  );
+  const addOnItem = await driver.wait(
+    until.elementLocated(By.css('#pos-addons [data-id="addon"]')),
+    5000
+  );
+  assert.equal(await addOnItem.isEnabled(), true);
+  const noAddOnsButton = await driver.findElement(By.id('pos-no-addons'));
+  assert.equal(await noAddOnsButton.getAttribute('aria-pressed'), 'true');
+  await addOnItem.click();
+  await driver.wait(until.elementTextContains(
+    driver.findElement(By.id('cart-items')),
+    'Add-on'
+  ), 5000);
+  await noAddOnsButton.click();
+  assert.doesNotMatch(await driver.findElement(By.id('cart-items')).getText(), /Add-on/);
+  assert.equal(await noAddOnsButton.getAttribute('aria-pressed'), 'true');
+  assert.equal(await noAddOnsButton.getText(), 'No add-on');
+
   await menuItem.click();
   await driver.wait(until.elementTextContains(
     driver.findElement(By.id('cart-items')),
@@ -118,22 +173,83 @@ test('owner can sign in, record a sale, view it in sales, and sign out', async (
 
   await driver.findElement(By.id('cash-received')).sendKeys('100');
   assert.equal(await driver.findElement(By.id('cash-change')).getText(), '₱ 30');
-  await driver.findElement(By.css('#pos-form button[type="submit"]')).click();
+  const recordSaleButton = await driver.findElement(By.css('#pos-form button[type="submit"]'));
+  await driver.executeScript('arguments[0].click();', recordSaleButton);
   await driver.wait(until.elementTextIs(
     driver.findElement(By.id('cart-total')),
     '₱ 0'
   ), 5000);
 
   await driver.findElement(By.linkText('Sales chart')).click();
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
   await driver.wait(until.elementTextContains(
     driver.findElement(By.id('sales-count')),
     '1 sale recorded today'
   ), 5000);
   assert.equal(await driver.findElement(By.id('stat-total')).getText(), '₱ 70');
 
+  await postForm('/menu/recipe/delete', { menuId: 'ml', inventoryId: 'matcha-powder' });
+  await postForm('/menu/recipe/delete', { menuId: 'addon', inventoryId: 'ube-powder' });
   await driver.findElement(By.linkText('Log out')).click();
   await driver.wait(until.urlContains('/Login.html'), 5000);
   assert.match(await driver.getTitle(), /Login/);
+});
+
+test('owner can upload a product photo and see it on the take-order screen', async () => {
+  await driver.get(`${baseUrl}/Login.html`);
+  await driver.findElement(By.name('password')).sendKeys('1234');
+  await driver.findElement(By.css('button[type="submit"]')).click();
+  await driver.wait(until.urlContains('/Index.html'), 5000);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
+  await driver.get(`${baseUrl}/Prices.html`);
+
+  const imagePath = path.join(testDirectory, 'product.png');
+  await writeFile(imagePath, Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lWQAAAAASUVORK5CYII=',
+    'base64'
+  ));
+  const photoForm = await driver.wait(
+    until.elementLocated(By.css('.photo-upload[data-menu-id="ml"]')),
+    5000
+  );
+  await photoForm.findElement(By.css('input[type="file"]')).sendKeys(imagePath);
+  await photoForm.findElement(By.css('button[type="submit"]')).click();
+  await driver.wait(until.elementTextContains(
+    photoForm.findElement(By.css('.photo-upload-status')),
+    'Photo uploaded.'
+  ), 5000);
+  const uploadedPhoto = await driver.findElement(By.css('tr[data-menu-id="ml"] .product-photo')).getAttribute('src');
+  const photoPath = new URL(uploadedPhoto).pathname;
+  assert.match(photoPath, /^\/product-images\/uploads\/[a-f0-9]{32}\.png$/);
+
+  const db = await getDatabase();
+  assert.equal(db.menu.ml.photo, photoPath);
+  const imageResponse = await driver.executeAsyncScript((url, done) => {
+    fetch(url).then(response => done({ status: response.status, type: response.headers.get('content-type') }))
+      .catch(error => done({ error: error.message }));
+  }, photoPath);
+  assert.equal(imageResponse.status, 200);
+  assert.match(imageResponse.type, /^image\/png/);
+
+  await driver.get(`${baseUrl}/Index.html`);
+  const menuPhoto = await driver.wait(
+    until.elementLocated(By.css('#pos-menu [data-id="ml"] .product-photo')),
+    5000
+  );
+  assert.match(await menuPhoto.getAttribute('src'), /product-images\/uploads\/[a-f0-9]{32}\.png$/);
+  await driver.wait(
+    () => driver.executeScript('return arguments[0].complete && arguments[0].naturalWidth > 0;', menuPhoto),
+    5000
+  );
+  const invalidUpload = await driver.executeAsyncScript(done => {
+    fetch('/menu/photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ menuId: 'ml', imageData: 'data:image/png;base64,Zm9v' })
+    }).then(response => done({ status: response.status }))
+      .catch(error => done({ error: error.message }));
+  });
+  assert.equal(invalidUpload.status, 400);
 });
 
 test('owner can view wastage type in audit log and remove a barista', async () => {
@@ -141,16 +257,19 @@ test('owner can view wastage type in audit log and remove a barista', async () =
   await driver.findElement(By.name('password')).sendKeys('1234');
   await driver.findElement(By.css('button[type="submit"]')).click();
   await driver.wait(until.urlContains('/Index.html'), 5000);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
 
   await driver.get(`${baseUrl}/Inventory.html`);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
   await driver.wait(until.elementLocated(By.css('#waste-select option[value="fresh-milk"]')), 5000);
   await driver.findElement(By.id('waste-select')).sendKeys('Fresh milk');
   await driver.findElement(By.name('reason')).sendKeys('Expired');
   const wastageForm = await driver.findElement(By.css('form[action="/inventory/waste"]'));
-  await wastageForm.findElement(By.css('button[type="submit"]')).click();
+  await driver.executeScript('arguments[0].click();', await wastageForm.findElement(By.css('button[type="submit"]')));
   await driver.wait(until.stalenessOf(wastageForm), 5000);
 
   await driver.get(`${baseUrl}/Logs.html`);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
   const wastageGroup = await driver.wait(
     until.elementLocated(By.css('summary[aria-label^="Wastage logged"]')),
     5000
@@ -162,12 +281,15 @@ test('owner can view wastage type in audit log and remove a barista', async () =
   assert.doesNotMatch(await wastageCells[3].getText(), /\(Expired\)$/);
 
   await driver.get(`${baseUrl}/Settings.html`);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
   await driver.findElement(By.css('form[action="/register-barista"] input[name="name"]')).sendKeys('Audit Test Barista');
   await driver.findElement(By.css('form[action="/register-barista"] input[name="username"]')).sendKeys('auditbarista');
-  await driver.findElement(By.css('form[action="/register-barista"] button[type="submit"]')).click();
+  const registerBaristaButton = await driver.findElement(By.css('form[action="/register-barista"] button[type="submit"]'));
+  await driver.executeScript('arguments[0].click();', registerBaristaButton);
   const baristaRowSelector = '#barista-users tr[data-username="auditbarista"]';
   await driver.wait(until.elementLocated(By.css(baristaRowSelector)), 5000);
-  await driver.findElement(By.css(`${baristaRowSelector} button[type="submit"]`)).click();
+  const removeBaristaButton = await driver.findElement(By.css(`${baristaRowSelector} button[type="submit"]`));
+  await driver.executeScript('arguments[0].click();', removeBaristaButton);
   await driver.wait(until.elementTextContains(
     driver.findElement(By.id('settings-message')),
     'Barista account removed.'
@@ -187,8 +309,10 @@ test('inventory costs update menu prices and unavailable drinks are disabled', a
   await driver.findElement(By.name('password')).sendKeys('1234');
   await driver.findElement(By.css('button[type="submit"]')).click();
   await driver.wait(until.urlContains('/Index.html'), 5000);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
 
   await driver.get(`${baseUrl}/Inventory.html`);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
   await driver.wait(until.elementLocated(By.id('inventory-table-body')), 5000);
   let db = await getDatabase();
   const initialMilkStock = db.inventory.find(item => item.id === 'fresh-milk').stock;
@@ -232,6 +356,7 @@ test('inventory costs update menu prices and unavailable drinks are disabled', a
   assert.ok(Math.abs(db.inventory.find(item => item.id === 'fresh-milk').unitCost - expectedMilkUnitCost) < 1e-9);
   assert.equal(db.menu.ml.price, Math.ceil(expectedIngredientCost / 0.85 - 1e-9));
   await driver.get(`${baseUrl}/Prices.html`);
+  await driver.wait(until.elementLocated(By.css('.system-notice')), 5000);
   await driver.wait(until.elementTextContains(
     driver.findElement(By.css('#prices-body tr[data-menu-id="ml"] td:nth-child(2)')),
     'Auto'

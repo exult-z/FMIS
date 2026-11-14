@@ -12,7 +12,10 @@
 <form method="post" action="/record-sale" id="pos-form">
 <p class="alert" id="pos-message" role="alert" hidden></p>
 <div class="card"><h2>New order</h2><p class="sub">Tap drinks to add to cart.</p>
-<div class="menu" id="pos-menu"></div></div>
+<h3>Drinks</h3><div class="menu" id="pos-menu"></div>
+<h3>Add-ons (optional)</h3><p class="sub">Add an add-on, or choose No add-on.</p>
+<div class="menu" id="pos-addons"></div>
+<button type="button" class="btn sm selected" id="pos-no-addons" aria-label="Clear selected add-ons" aria-pressed="true">No add-on</button></div>
 
 <div class="card"><h2>Current order</h2>
 <div class="cart-columns"><span>Quantity</span><span>Product</span><span>Total</span></div>
@@ -42,6 +45,14 @@ let posMenu = {};
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
+const productPhotos = {
+  'halukay ube': '/product-images/halukay-ube.jpg',
+  'matcha coffee latte': '/product-images/matcha-coffee-latte.jpg',
+  'matcha choco latte': '/product-images/matcha-choco-latte.jpg',
+  'matcha latte': '/product-images/matcha-latte.jpg',
+  'matcha ube': '/product-images/matcha-ube-latte.jpg',
+  'matcha ube latte': '/product-images/matcha-ube-latte.jpg'
+};
 function updateMenuAvailability() {
   const requiredByIngredient = new Map();
   for (const [menuId, item] of Object.entries(cart)) {
@@ -54,8 +65,9 @@ function updateMenuAvailability() {
     }
   }
 
-  document.querySelectorAll('#pos-menu .chip').forEach(button => {
+  document.querySelectorAll('#pos-menu .chip, #pos-addons .chip').forEach(button => {
     const item = posMenu[button.dataset.id];
+    const missingRecipe = item.recipeConfigured === false;
     const shortages = [...(item.unavailableIngredients || [])];
     for (const ingredient of item.ingredients || []) {
       const current = requiredByIngredient.get(ingredient.inventoryId) || 0;
@@ -63,13 +75,20 @@ function updateMenuAvailability() {
       if (required > ingredient.stock) shortages.push(ingredient.ingredientName);
     }
     const unavailableIngredients = [...new Set(shortages)];
-    button.disabled = unavailableIngredients.length > 0;
+    button.disabled = missingRecipe || unavailableIngredients.length > 0;
     button.classList.toggle('unavailable', button.disabled);
     button.setAttribute('aria-disabled', String(button.disabled));
-    button.title = button.disabled ? `Insufficient stock: ${unavailableIngredients.join(', ')}` : '';
+    button.title = missingRecipe
+      ? 'Add ingredients in Menu & prices before taking orders.'
+      : button.disabled ? `Insufficient stock: ${unavailableIngredients.join(', ')}` : '';
     button.querySelector('.availability-message').textContent =
-      button.disabled ? `Unavailable: ${unavailableIngredients.join(', ')}` : '';
+      missingRecipe ? 'Add ingredients in Menu & prices'
+        : button.disabled ? `Unavailable: ${unavailableIngredients.join(', ')}` : '';
   });
+  const hasAddOn = Object.keys(cart).some(id => posMenu[id] && !posMenu[id].isCup);
+  const noAddOnsButton = document.getElementById('pos-no-addons');
+  noAddOnsButton.setAttribute('aria-pressed', String(!hasAddOn));
+  noAddOnsButton.classList.toggle('selected', !hasAddOn);
 }
 function setPayment(method) {
   document.getElementById('hidden-method-input').value = method;
@@ -102,7 +121,7 @@ function renderCart() {
     container.insertAdjacentHTML('beforeend',
       `<div class="row cart-row"><span class="qty-controls"><span class="qty">${item.qty}</span><button type="button" class="x" data-id="${escapeHtml(id)}" aria-label="Remove one ${escapeHtml(item.name)}">−</button></span><span class="g">${escapeHtml(item.name)}</span><b class="line-total">₱ ${sub}</b></div>`);
   }
-  if (!Object.keys(cart).length) container.innerHTML = '<p class="sub">No items in current order. Tap a drink above.</p>';
+  if (!Object.keys(cart).length) container.innerHTML = '<p class="sub">No items in current order. Tap a drink or add-on above.</p>';
   container.querySelectorAll('.x').forEach(button => button.addEventListener('click', () => removeItem(button.dataset.id)));
   document.getElementById('cart-total').textContent = '₱ ' + total;
   document.getElementById('hidden-items-input').value = summary.join(', ');
@@ -119,19 +138,35 @@ function removeItem(id) {
   if (--cart[id].qty <= 0) delete cart[id];
   renderCart();
 }
+function renderMenuItems(entries, container) {
+  container.innerHTML = entries.map(([id, item]) => {
+    const photo = item.photo || productPhotos[String(item.name).trim().toLowerCase()];
+    const photoMarkup = photo
+      ? `<img class="product-photo" src="${escapeHtml(photo)}" alt="" loading="lazy">`
+      : '<span class="product-photo-placeholder" aria-hidden="true">Photo needed</span>';
+    return `<button type="button" class="chip" data-id="${escapeHtml(id)}" data-name="${escapeHtml(item.name)}" data-price="${item.price}">
+       ${photoMarkup}<span class="chip-copy">${escapeHtml(item.name)}<small>₱ ${item.price}</small><small class="availability-message"></small></span></button>`;
+  }).join('');
+  container.querySelectorAll('.chip').forEach(button => button.addEventListener('click', () => {
+    if (button.disabled) return;
+    const id = button.dataset.id, name = button.dataset.name, price = +button.dataset.price;
+    if (!cart[id]) cart[id] = { name, price, qty: 0 };
+    cart[id].qty++;
+    renderCart();
+  }));
+}
 (async () => {
   const db = await (await fetch('/api/db?t=' + Date.now())).json();
   posMenu = db.menu || {};
-  const wrap = document.getElementById('pos-menu');
-  wrap.innerHTML = Object.entries(posMenu).map(([id, it]) =>
-    `<button type="button" class="chip" data-id="${escapeHtml(id)}" data-name="${escapeHtml(it.name)}" data-price="${it.price}">
-       <span>${escapeHtml(it.name)}<small>₱ ${it.price}</small><small class="availability-message"></small></span></button>`).join('');
-  wrap.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
-    if (b.disabled) return;
-    const id = b.dataset.id, name = b.dataset.name, price = +b.dataset.price;
-    if (!cart[id]) cart[id] = { name, price, qty: 0 };
-    cart[id].qty++; renderCart();
-  }));
+  const menuItems = Object.entries(posMenu);
+  renderMenuItems(menuItems.filter(([, item]) => item.isCup), document.getElementById('pos-menu'));
+  renderMenuItems(menuItems.filter(([, item]) => !item.isCup), document.getElementById('pos-addons'));
+  document.getElementById('pos-no-addons').addEventListener('click', () => {
+    for (const id of Object.keys(cart)) {
+      if (posMenu[id] && !posMenu[id].isCup) delete cart[id];
+    }
+    renderCart();
+  });
   renderCart();
 })();
 document.getElementById('pos-form').addEventListener('submit', event => {
@@ -144,6 +179,7 @@ if (posParams.get('error')) {
   const error = posParams.get('error');
   message.textContent = error === 'stock'
     ? `${posParams.get('item') || 'An ingredient'} has insufficient stock. No sale was recorded.`
+    : error === 'recipe' ? `Add ingredients to ${posParams.get('item') || 'this menu item'} before recording an order.`
     : error === 'cash' ? 'Cash received must cover the order total. No sale was recorded.'
     : error === 'server' ? 'The sale could not be saved. Please try again.'
       : 'Add at least one menu item before recording a sale.';

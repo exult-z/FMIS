@@ -20,6 +20,8 @@
 - Owners can enter purchase quantities and total costs when adding or restocking inventory. Restocks update a weighted-average cost per inventory unit. Once all recipe ingredients have costs, menu prices are calculated to provide at least a 15% profit margin (ingredient cost divided by 0.85), rounded up to a whole peso.
 - Owners can edit an inventory item's unit from **Inventory**. Changing the unit updates its label but does not convert stock or recipe amounts, and clears its unit cost; enter a new purchase cost after changing units.
 - POS items are grayed out when any configured recipe ingredient does not have enough stock. The server checks stock again when recording a sale.
+- A menu item cannot be ordered until its recipe includes at least one ingredient other than cups; the owner can configure recipes and choose Drink or Add-on on **Menu & prices**. The order screen separates optional add-ons from drinks and includes a **No add-on** option.
+- Owners can upload a JPEG, PNG, GIF, or WebP product photo (up to 3 MB) from **Menu & prices**. Uploaded photos persist under `product-images/uploads/` and appear in both take-order screens; bundled product photos remain as fallbacks for matching names.
 - Owners can set or edit an inventory item's expiration date on **Inventory**. Stock of 50 units or less is critical (orange), stock above 50 and up to 100 units is low (yellow); both statuses appear in the owner inventory notice and Dashboard. Expired items and items expiring within 30 days also appear in the owner inventory notice. Cups do not require expiration dates.
 - Expiration is tracked as one date per inventory item; restocking can update that tracked date.
 - Sale, wastage, and save actions submit directly without browser confirmation pop-ups.

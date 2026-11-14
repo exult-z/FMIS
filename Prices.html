@@ -12,15 +12,16 @@
 <p class="alert" id="recipe-message" role="status" hidden></p>
 
 <div class="card"><h2>Current menu</h2>
-<p class="sub">Set every ingredient's amount and recipe unit for each product. Selling prices are calculated from recipe costs to maintain at least a 15% profit margin. Enter purchase quantities and costs in Inventory; each restock updates the weighted-average ingredient cost. Prices round up to the nearest peso.</p>
+<p class="sub">Add at least one drink ingredient (besides cups) to each product before it can be ordered, then set every ingredient's amount and recipe unit. Selling prices are calculated from recipe costs to maintain at least a 15% profit margin. Enter purchase quantities and costs in Inventory; each restock updates the weighted-average ingredient cost. Prices round up to the nearest peso. Upload an optional JPEG, PNG, GIF, or WebP photo (up to 3 MB) for each product.</p>
 <table>
-<thead><tr><th>Item</th><th>Selling price (₱)</th><th>Ingredients per item</th><th></th></tr></thead>
+<thead><tr><th>Item &amp; photo</th><th>Selling price (₱)</th><th>Ingredients per item</th><th></th></tr></thead>
 <tbody id="prices-body"></tbody>
 </table></div>
 
 <div class="card"><h2>Add new item</h2>
 <form class="form form-grid menu-add-form" method="post" action="/menu/add">
 <label class="field">Item name<input type="text" name="name" placeholder="e.g. Strawberry Latte" required></label>
+<label class="field">Type<select name="isCup"><option value="1">Drink</option><option value="0">Add-on</option></select></label>
 <button type="submit" class="btn pri">Add item</button>
 </form></div>
 
@@ -69,6 +70,18 @@ const recipeParams = new URLSearchParams(location.search);
             <input type="text" name="name" value="${escapeHtml(it.name)}" required>
             <button type="submit" class="btn sm">Save name</button>
           </form>
+          <div class="product-photo-editor">
+            ${it.photo
+              ? `<img class="product-photo" src="${escapeHtml(it.photo)}" alt="Current photo of ${escapeHtml(it.name)}">`
+              : '<span class="product-photo-placeholder" aria-hidden="true">No photo</span>'}
+            <form class="photo-upload" data-menu-id="${escapeHtml(id)}">
+              <label class="field">Product photo
+                <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" required>
+              </label>
+              <button type="submit" class="btn sm">Upload photo</button>
+              <small class="photo-upload-status" role="status" aria-live="polite"></small>
+            </form>
+          </div>
         </td>
         <td>₱ ${escapeHtml(it.price)}<small class="sub price-cost">${it.priceAutoCalculated
           ? `Auto · ingredient cost ₱ ${Number(it.ingredientCost).toFixed(2)}`
@@ -101,6 +114,60 @@ const recipeParams = new URLSearchParams(location.search);
         </td>
       </tr>`);
   }
+  tbody.querySelectorAll('.photo-upload').forEach(form => form.addEventListener('submit', event => {
+    event.preventDefault();
+    const fileInput = form.querySelector('input[type="file"]');
+    const file = fileInput.files[0];
+    const status = form.querySelector('.photo-upload-status');
+    const button = form.querySelector('button[type="submit"]');
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      status.textContent = 'Choose an image no larger than 3 MB.';
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Uploading photo…';
+    const reader = new FileReader();
+    reader.onerror = () => {
+      status.textContent = 'The selected photo could not be read.';
+      button.disabled = false;
+    };
+    reader.onload = async () => {
+      try {
+        const response = await fetch('/menu/photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ menuId: form.dataset.menuId, imageData: reader.result })
+        });
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          if (response.redirected && new URL(response.url).pathname.toLowerCase() === '/login.html') {
+            throw new Error('Your session expired. Sign in again, then upload the photo.');
+          }
+          if (response.status === 404) {
+            throw new Error('Photo upload is unavailable. Restart the FMIS server, refresh this page, and try again.');
+          }
+          throw new Error(`The server returned an unexpected response (${response.status}). Refresh the page and try again.`);
+        }
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'The photo could not be uploaded.');
+        const preview = form.closest('.product-photo-editor').querySelector('.product-photo, .product-photo-placeholder');
+        const image = document.createElement('img');
+        image.className = 'product-photo';
+        image.src = result.photo;
+        image.alt = `Current photo of ${fileInput.closest('td').querySelector('input[name="name"]').value}`;
+        preview.replaceWith(image);
+        fileInput.value = '';
+        status.textContent = 'Photo uploaded.';
+      } catch (error) {
+        status.textContent = error.message || 'The photo could not be uploaded.';
+      } finally {
+        button.disabled = false;
+      }
+    };
+    reader.readAsDataURL(file);
+  }));
   const activeMenuId = recipeParams.get('menuId');
   if (activeMenuId) {
     const activeRecipePanel = Array.from(tbody.querySelectorAll('details'))

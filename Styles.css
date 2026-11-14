@@ -38,10 +38,14 @@ main{max-width:980px;margin:auto;padding:14px 16px 40px}
 .audit-count{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--bs);color:var(--mu);font-size:12px}
 
 /* POS */
-.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
 .chip{display:flex;align-items:center;gap:8px;text-align:left;background:var(--bs);border:1.5px solid var(--ink);border-radius:10px;padding:8px;cursor:pointer;font-weight:600;font-size:13px}
 .chip i{width:30px;height:30px;border-radius:50%;flex:none}
 .chip small{display:block;font-weight:400;color:var(--mu)}
+.product-photo,.product-photo-placeholder{width:64px;height:64px;flex:none;border-radius:8px}
+.product-photo{object-fit:cover}
+.product-photo-placeholder{display:grid;place-items:center;padding:4px;background:var(--sf);color:var(--mu);font-size:10px;text-align:center}
+.chip-copy{min-width:0}
 .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--ln)}
 .row .g{flex:1}
 .qty-controls{display:inline-flex;align-items:center;gap:6px;flex:none}
@@ -65,6 +69,7 @@ main{max-width:980px;margin:auto;padding:14px 16px 40px}
 .btn{border:1.5px solid var(--ln);background:var(--sf);border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
 .btn.on.cash{border-color:var(--ink);background:var(--bs);color:var(--ink)}
 .btn.on.gcash{background:var(--br);border-color:var(--br);color:#fff}
+.btn.selected{background:var(--bs);border-color:var(--ink)}
 .btn.pri{background:var(--pri);border-color:var(--pri);color:var(--pi);flex:1;min-width:140px}
 .btn.sm{padding:6px 10px;font-size:13px}
 .btn:focus-visible,.chip:focus-visible,nav a:focus-visible{outline:3px solid var(--br);outline-offset:2px}
@@ -126,6 +131,11 @@ td{padding:9px 8px;border-bottom:1px solid var(--ln);vertical-align:middle}
 .inventory-restock-form{align-items:start;grid-template-columns:repeat(2,minmax(0,1fr))}
 .inventory-restock-form>.btn{grid-column:1/-1}
 .menu-add-form{grid-template-columns:minmax(0,1fr) auto}
+.product-photo-editor{display:flex;align-items:center;gap:8px;margin-top:8px}
+.photo-upload{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px;min-width:0}
+.photo-upload .field{min-width:0;margin:0;font-size:12px}
+.photo-upload input[type=file]{display:block;width:100%;max-width:230px;margin-top:3px;font-size:12px}
+.photo-upload-status{grid-column:1/-1;color:var(--mu)}
 .form-grid .field{min-width:0;margin:0}
 .form-grid .field input,.form-grid .field select{display:block;width:100%;margin-top:4px}
 .form-grid>.btn{min-width:140px}

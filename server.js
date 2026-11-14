@@ -1,5 +1,6 @@
 const express = require('express');
 const { DatabaseSync } = require('node:sqlite');
+const fs = require('node:fs');
 const path = require('path');
 const crypto = require('crypto');
 process.env.TZ = process.env.TZ || 'Asia/Manila';
@@ -7,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
@@ -31,7 +32,8 @@ db.exec(`
     id    TEXT PRIMARY KEY,
     name  TEXT NOT NULL,
     price INTEGER NOT NULL,
-    is_cup INTEGER NOT NULL DEFAULT 1
+    is_cup INTEGER NOT NULL DEFAULT 1,
+    image_path TEXT
   );
 
   CREATE TABLE IF NOT EXISTS inventory (
@@ -104,6 +106,11 @@ db.exec(`
     expires_at INTEGER NOT NULL
   );
 `);
+
+const menuColumns = db.prepare('PRAGMA table_info(menu)').all().map(column => column.name);
+if (!menuColumns.includes('image_path')) {
+  db.exec('ALTER TABLE menu ADD COLUMN image_path TEXT');
+}
 
 // ---------- Seed (only if empty) ----------
 function seedIfEmpty() {
@@ -250,6 +257,13 @@ function inventoryStockStatus(stock) {
   if (stock <= 50) return 'critical';
   if (stock <= 100) return 'low';
   return 'ok';
+}
+
+function hasMenuIngredients(ingredients) {
+  return ingredients.some(ingredient => {
+    const name = String(ingredient.ingredientName || '').trim().toLowerCase();
+    return Boolean(name && name !== 'cups');
+  });
 }
 
 function calculateMenuCost(menuId) {
@@ -435,6 +449,11 @@ const PUBLIC_FILES = new Map([
   ['/login.html', 'Login.html'],
   ['/logs.html', 'Logs.html'],
   ['/prices.html', 'Prices.html'],
+  ['/product-images/halukay-ube.jpg', 'Halukay Ube.jpg'],
+  ['/product-images/matcha-coffee-latte.jpg', 'Matcha Coffee Latte.jpg'],
+  ['/product-images/matcha-choco-latte.jpg', 'Matcha Choco Latte.jpg'],
+  ['/product-images/matcha-latte.jpg', 'Matcha Latte.jpg'],
+  ['/product-images/matcha-ube-latte.jpg', 'Matcha Ube Latte.jpg'],
   ['/report.html', 'Report.html'],
   ['/sales.html', 'Sales.html'],
   ['/forecast.html', 'Forecast.html'],
@@ -443,6 +462,24 @@ const PUBLIC_FILES = new Map([
   ['/settings.html', 'Settings.html'],
   ['/styles.css', 'Styles.css']
 ]);
+
+const PRODUCT_UPLOAD_DIR = process.env.FMIS_PRODUCT_IMAGES_DIR
+  || path.join(__dirname, 'product-images', 'uploads');
+const uploadedPhotoTypes = {
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp'
+};
+
+app.get('/product-images/uploads/:filename', (req, res, next) => {
+  const match = req.params.filename.match(/^([a-f0-9]{32})\.(jpg|png|gif|webp)$/);
+  if (!match) return res.sendStatus(404);
+  res.type(uploadedPhotoTypes[match[2]]);
+  res.sendFile(path.join(PRODUCT_UPLOAD_DIR, req.params.filename), error => {
+    if (error && !res.headersSent) next(error);
+  });
+});
 
 app.get('*', (req, res, next) => {
   const file = PUBLIC_FILES.get(req.path.toLowerCase());
@@ -562,8 +599,8 @@ function historyObject(user) {
 
 app.get('/api/db', (req, res) => {
   const menu = {};
-  for (const r of db.prepare('SELECT id, name, price, is_cup AS isCup FROM menu').all()) {
-    menu[r.id] = { name: r.name, price: r.price, isCup: Boolean(r.isCup), ingredients: [] };
+  for (const r of db.prepare('SELECT id, name, price, is_cup AS isCup, image_path AS photo FROM menu').all()) {
+    menu[r.id] = { name: r.name, price: r.price, isCup: Boolean(r.isCup), photo: r.photo, ingredients: [] };
   }
   const recipes = db.prepare(`
     SELECT recipes.menu_id AS menuId, recipes.inventory_id AS inventoryId,
@@ -584,6 +621,8 @@ app.get('/api/db', (req, res) => {
   }
 
   for (const [menuId, item] of Object.entries(menu)) {
+    item.recipeConfigured = hasMenuIngredients(item.ingredients);
+    if (!item.recipeConfigured) item.available = false;
     item.available = item.available !== false;
     item.unavailableIngredients = item.unavailableIngredients || [];
     item.ingredientCost = calculateMenuCost(menuId);
@@ -951,9 +990,21 @@ app.post('/record-sale', (req, res) => {
       db.prepare('SELECT id, unit FROM inventory').all().map(row => [row.id, row.unit])
     );
     const requiredStock = new Map();
-    const recipeQuery = db.prepare('SELECT inventory_id AS inventoryId, quantity, unit FROM recipes WHERE menu_id = ?');
+    const recipeQuery = db.prepare(`
+      SELECT recipes.inventory_id AS inventoryId, recipes.quantity, recipes.unit,
+             inventory.name AS ingredientName
+      FROM recipes
+      LEFT JOIN inventory ON inventory.id = recipes.inventory_id
+      WHERE recipes.menu_id = ?
+    `);
     for (const item of items) {
-      for (const ingredient of recipeQuery.all(item.id)) {
+      const ingredients = recipeQuery.all(item.id);
+      if (!hasMenuIngredients(ingredients)) {
+        db.exec('ROLLBACK');
+        transactionOpen = false;
+        return res.redirect(`${redirectPath}?error=recipe&item=${encodeURIComponent(item.name)}`);
+      }
+      for (const ingredient of ingredients) {
         const inventoryUnit = inventoryUnits.get(ingredient.inventoryId) || ingredient.unit;
         const needed = convertQuantityToUnit(ingredient.quantity * item.qty, ingredient.unit, inventoryUnit);
         if (!Number.isFinite(needed)) {
@@ -1167,6 +1218,47 @@ app.post('/inventory/waste', (req, res) => {
 });
 
 // ---------- Menu ----------
+app.post('/menu/photo', requireOwner, (req, res) => {
+  const menuId = String(req.body.menuId || '');
+  const imageData = String(req.body.imageData || '');
+  const menuItem = db.prepare('SELECT id FROM menu WHERE id = ?').get(menuId);
+  if (!menuItem) return res.status(404).json({ error: 'Menu item not found.' });
+
+  const imageMatch = imageData.match(/^data:image\/(jpeg|png|gif|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!imageMatch || imageData.length > 4 * 1024 * 1024) {
+    return res.status(400).json({ error: 'Choose a JPEG, PNG, GIF, or WebP image no larger than 3 MB.' });
+  }
+
+  const image = Buffer.from(imageMatch[2], 'base64');
+  if (!image.length || image.length > 3 * 1024 * 1024) {
+    return res.status(400).json({ error: 'Choose a JPEG, PNG, GIF, or WebP image no larger than 3 MB.' });
+  }
+
+  const validSignature = imageMatch[1] === 'jpeg'
+    ? image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff
+    : imageMatch[1] === 'png'
+      ? image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      : imageMatch[1] === 'gif'
+        ? image.length >= 6 && ['GIF87a', 'GIF89a'].includes(image.toString('ascii', 0, 6))
+        : image.length >= 12 && image.toString('ascii', 0, 4) === 'RIFF'
+          && image.toString('ascii', 8, 12) === 'WEBP';
+  if (!validSignature) return res.status(400).json({ error: 'The selected file is not a valid image.' });
+
+  const format = imageMatch[1] === 'jpeg' ? 'jpg' : imageMatch[1];
+  const filename = `${crypto.randomBytes(16).toString('hex')}.${format}`;
+  const photo = `/product-images/uploads/${filename}`;
+  try {
+    fs.mkdirSync(PRODUCT_UPLOAD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(PRODUCT_UPLOAD_DIR, filename), image, { flag: 'wx' });
+    db.prepare('UPDATE menu SET image_path = ? WHERE id = ?').run(photo, menuId);
+    addLog(req.user.name, `Uploaded product photo for menu item ${menuId}`);
+    res.json({ photo });
+  } catch (error) {
+    console.error('Could not save product photo:', error);
+    res.status(500).json({ error: 'The product photo could not be saved. Please try again.' });
+  }
+});
+
 app.post('/menu/update', requireOwner, (req, res) => {
   const id = req.body.id;
   const name = (req.body.name || '').trim();
